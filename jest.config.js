@@ -1,6 +1,5 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: '.',
   roots: ['<rootDir>/src'],
@@ -13,6 +12,10 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json' }],
+    '^.+\\.(t|j)s$': ['@swc/jest'],
   },
+  // Transforma tambem pacotes ESM do Nest que o Jest nao digere direto.
+  transformIgnorePatterns: [
+    'node_modules/(?!(\\.pnpm/)?(@nestjs|bullmq|ioredis|@aws-sdk)|.*/node_modules/(?!@nestjs|bullmq|ioredis))',
+  ],
 };
