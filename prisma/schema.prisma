@@ -1,0 +1,394 @@
+// Schema oficial do Sinapse (Prisma 7).
+// Convencoes do CLAUDE.md: UUIDs, datas em UTC, nunca expor sobrenome ou email de terceiros.
+// A URL do banco fica em prisma.config.ts.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs" // o NestJS compila para CommonJS por padrão
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
+enum DeckVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+// Errei → AGAIN, Difícil → HARD, Fácil → GOOD (Rating.Again / Hard / Good do ts-fsrs)
+enum ReviewRating {
+  AGAIN
+  HARD
+  GOOD
+}
+
+// Espelha State do ts-fsrs
+enum CardLearningState {
+  NEW
+  LEARNING
+  REVIEW
+  RELEARNING
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  CONSUMED
+}
+
+enum SubscriptionPlan {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+// "Pendentes primeiro" e "Misturar" na tela Estudar
+enum StudyOrder {
+  DUE_FIRST
+  SHUFFLE
+}
+
+enum InvoiceStatus {
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ReportReason {
+  WRONG_CONTENT
+  COPYRIGHT
+  OFFENSIVE
+  SPAM
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  DISMISSED
+  ACTIONED
+}
+
+model User {
+  id                String          @id @default(uuid()) @db.Uuid
+  firstName         String
+  lastName          String
+  email             String          @unique // sempre minúsculo
+  emailVerifiedAt   DateTime?
+  passwordHash      String
+  passwordChangedAt DateTime? // "Alterada há N meses" no Perfil
+  avatarKey         String? // chave no storage (R2/S3)
+  theme             ThemePreference @default(SYSTEM)
+  timezone          String          @default("America/Sao_Paulo")
+  courseId          String?         @db.Uuid
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  course         Course?         @relation(fields: [courseId], references: [id])
+  decks          Deck[]
+  saves          DeckSave[]
+  favorites      DeckFavorite[]
+  cardStates     CardState[]
+  reviewLogs     ReviewLog[]
+  studySessions  StudySession[]
+  imports        ImportJob[]
+  subscription   Subscription?
+  authSessions   AuthSession[]
+  passwordResets PasswordReset[]
+  invoices       Invoice[]
+  reports        DeckReport[]    @relation("ReportAuthor")
+}
+
+model Course {
+  id       String    @id @default(uuid()) @db.Uuid
+  slug     String    @unique // "medicina"
+  name     String // "Medicina"
+  years    Int // 6
+  subjects Subject[]
+  decks    Deck[]
+  users    User[]
+}
+
+model Subject {
+  id       String        @id @default(uuid()) @db.Uuid
+  courseId String        @db.Uuid
+  slug     String
+  name     String // "Farmacologia"
+  course   Course        @relation(fields: [courseId], references: [id])
+  decks    DeckSubject[]
+
+  @@unique([courseId, slug])
+}
+
+model Deck {
+  id               String         @id @default(uuid()) @db.Uuid
+  ownerId          String         @db.Uuid
+  courseId         String         @db.Uuid
+  year             Int // 1..course.years
+  name             String
+  visibility       DeckVisibility @default(PRIVATE)
+  cardCount        Int            @default(0) // desnormalizado
+  saveCount        Int            @default(0) // desnormalizado
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  contentUpdatedAt DateTime       @default(now()) // "Atualizado há N dias": muda com o deck e com os cards
+  hiddenAt         DateTime? // ocultado pela moderação: some da Comunidade, quem salvou continua
+  deletedAt        DateTime?
+
+  owner      User           @relation(fields: [ownerId], references: [id])
+  course     Course         @relation(fields: [courseId], references: [id])
+  subjects   DeckSubject[]
+  cards      Card[]
+  saves      DeckSave[]
+  favorites  DeckFavorite[]
+  cardStates CardState[]
+  reviewLogs ReviewLog[]
+  reports    DeckReport[]
+
+  @@index([ownerId])
+  @@index([visibility, courseId, year])
+}
+
+model DeckSubject {
+  deckId    String  @db.Uuid
+  subjectId String  @db.Uuid
+  deck      Deck    @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  subject   Subject @relation(fields: [subjectId], references: [id])
+
+  @@id([deckId, subjectId])
+  @@index([subjectId])
+}
+
+model Card {
+  id        String    @id @default(uuid()) @db.Uuid
+  deckId    String    @db.Uuid
+  question  String
+  answer    String
+  position  Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  deck       Deck        @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  states     CardState[]
+  reviewLogs ReviewLog[]
+
+  @@index([deckId, position])
+}
+
+// Deck da comunidade salvo pelo usuário (aparece em Flashcards › Da comunidade)
+model DeckSave {
+  userId    String   @db.Uuid
+  deckId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deck      Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  @@id([userId, deckId])
+  @@index([deckId])
+}
+
+model DeckFavorite {
+  userId    String   @db.Uuid
+  deckId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deck      Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  @@id([userId, deckId])
+}
+
+// Estado FSRS por usuário e por card (inclusive cards de decks da comunidade)
+model CardState {
+  userId        String            @db.Uuid
+  cardId        String            @db.Uuid
+  deckId        String            @db.Uuid
+  state         CardLearningState @default(NEW)
+  due           DateTime
+  stability     Float             @default(0)
+  difficulty    Float             @default(0)
+  elapsedDays   Int               @default(0)
+  scheduledDays Int               @default(0)
+  learningSteps Int               @default(0)
+  reps          Int               @default(0)
+  lapses        Int               @default(0)
+  lastReview    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  deck Deck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  @@id([userId, cardId])
+  @@index([userId, due])
+  @@index([userId, deckId])
+}
+
+model ReviewLog {
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @db.Uuid
+  cardId        String            @db.Uuid
+  deckId        String            @db.Uuid
+  sessionId     String?           @db.Uuid
+  rating        ReviewRating
+  durationMs    Int // tempo até avaliar, limitado a 5 min
+  stateBefore   CardLearningState
+  scheduledDays Int
+  reviewedAt    DateTime          @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card    Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  deck    Deck          @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  session StudySession? @relation(fields: [sessionId], references: [id])
+
+  @@index([userId, reviewedAt])
+  @@index([userId, deckId, reviewedAt])
+}
+
+model StudySession {
+  id              String     @id @default(uuid()) @db.Uuid
+  userId          String     @db.Uuid
+  deckIds         String[]   @db.Uuid
+  subjectIds      String[]   @db.Uuid
+  cardLimit       Int? // 10, 20, 30 ou nulo (todos)
+  order           StudyOrder @default(DUE_FIRST)
+  cardIds         String[]   @db.Uuid // ordem da sessão; "Estudar novamente" reusa
+  againCount      Int        @default(0)
+  hardCount       Int        @default(0)
+  goodCount       Int        @default(0)
+  totalDurationMs Int        @default(0)
+  startedAt       DateTime   @default(now())
+  finishedAt      DateTime?
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews ReviewLog[]
+
+  @@index([userId, startedAt])
+}
+
+model ImportJob {
+  id                 String       @id @default(uuid()) @db.Uuid
+  userId             String       @db.Uuid
+  fileKey            String
+  fileName           String
+  mimeType           String
+  sizeBytes          Int
+  status             ImportStatus @default(PENDING)
+  pairs              Json? // [{ question, answer | null }]
+  pairsFound         Int?
+  pairsMissingAnswer Int?
+  error              String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Subscription {
+  id                     String             @id @default(uuid()) @db.Uuid
+  userId                 String             @unique @db.Uuid
+  provider               String // gateway escolhido
+  providerCustomerId     String?
+  providerSubscriptionId String?            @unique
+  plan                   SubscriptionPlan
+  status                 SubscriptionStatus
+  trialEndsAt            DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  paymentMethodLabel     String? // ex.: "Visa final 4417" (só o que o gateway devolve; nunca o número)
+  graceUntil             DateTime? // prazo para atualizar o cartão quando o pagamento foi recusado
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Idempotência dos webhooks do gateway
+model BillingEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  provider        String
+  providerEventId String    @unique
+  type            String
+  payload         Json
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Cobranças confirmadas pelo gateway (histórico da aba Assinatura)
+model Invoice {
+  id                 String           @id @default(uuid()) @db.Uuid
+  userId             String           @db.Uuid
+  providerInvoiceId  String           @unique
+  plan               SubscriptionPlan
+  amountCents        Int
+  currency           String           @default("BRL")
+  status             InvoiceStatus
+  paymentMethodLabel String?
+  paidAt             DateTime?
+  createdAt          DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// "Denunciar deck" (um por usuário e deck)
+model DeckReport {
+  id         String       @id @default(uuid()) @db.Uuid
+  deckId     String       @db.Uuid
+  reporterId String       @db.Uuid
+  reason     ReportReason
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  deck     Deck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  reporter User @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([deckId, reporterId])
+  @@index([status, createdAt])
+}
