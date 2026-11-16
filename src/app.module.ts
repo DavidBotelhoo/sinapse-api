@@ -6,6 +6,9 @@ import type { Env } from './config/env';
 import { buildLoggerOptions } from './config/logger.config';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { HealthModule } from './modules/health/health.module';
     }),
     PrismaModule,
     HealthModule,
+    AuthModule,
+    UsersModule,
+    StorageModule,
   ],
   controllers: [],
   providers: [],
