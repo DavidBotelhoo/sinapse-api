@@ -9,6 +9,9 @@ import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
+import { DecksModule } from './modules/decks/decks.module';
+import { ImportsModule } from './modules/imports/imports.module';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { StorageModule } from './modules/storage/storage.module';
     AuthModule,
     UsersModule,
     StorageModule,
+    CatalogModule,
+    DecksModule,
+    ImportsModule,
   ],
   controllers: [],
   providers: [],

@@ -1,4 +1,4 @@
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -26,6 +26,11 @@ export class LocalStorageService extends StorageService {
     const target = resolve(this.root, input.key);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, input.body);
+  }
+
+  async getObject(key: string): Promise<Buffer> {
+    const target = resolve(this.root, key);
+    return readFile(target);
   }
 
   async deleteObject(key: string): Promise<void> {

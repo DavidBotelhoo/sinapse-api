@@ -3,9 +3,11 @@ export interface Paginated<T> {
   nextCursor: string | null;
 }
 
+// k: chave de ordenacao serializavel (ISO date, number com padding, etc.);
+// id: tiebreak estavel.
 export interface CursorPayload {
   id: string;
-  ts: string; // ISO-8601
+  k: string;
 }
 
 export function encodeCursor(payload: CursorPayload): string {
@@ -20,7 +22,7 @@ export function decodeCursor(raw: string): CursorPayload | null {
       parsed &&
       typeof parsed === 'object' &&
       typeof (parsed as CursorPayload).id === 'string' &&
-      typeof (parsed as CursorPayload).ts === 'string'
+      typeof (parsed as CursorPayload).k === 'string'
     ) {
       return parsed as CursorPayload;
     }
