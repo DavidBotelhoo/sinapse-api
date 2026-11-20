@@ -27,6 +27,11 @@ export interface DeckStats {
 
 const MASTERY_THRESHOLD_DAYS = 21;
 
+// Dominado: em revisao e com intervalo de 21 dias ou mais.
+export function isMastered(state: { state: CardLearningState; scheduledDays: number }): boolean {
+  return state.state === CardLearningState.REVIEW && state.scheduledDays >= MASTERY_THRESHOLD_DAYS;
+}
+
 @Injectable()
 export class CardStatusService {
   constructor(private readonly prisma: PrismaService) {}
@@ -40,10 +45,8 @@ export class CardStatusService {
       return { status: 'NEW', dueInDays: null };
     }
 
-    if (state.state === CardLearningState.REVIEW && state.scheduledDays >= MASTERY_THRESHOLD_DAYS) {
-      return { status: 'MASTERED', dueInDays: null };
-    }
-
+    // Ordem do docs/dominio.md: vencido (atrasado ou hoje) vem antes de dominado. Um card
+    // dominado que venceu precisa voltar para a revisao.
     const startToday = startOfTodayUtc(timezone, now);
     const startTomorrow = startOfTomorrowUtc(timezone, now);
     const dueMs = state.due.getTime();
@@ -53,6 +56,9 @@ export class CardStatusService {
     }
     if (dueMs < startTomorrow.getTime()) {
       return { status: 'DUE_TODAY', dueInDays: null };
+    }
+    if (isMastered(state)) {
+      return { status: 'MASTERED', dueInDays: null };
     }
     return { status: 'SCHEDULED', dueInDays: daysBetween(now, state.due, timezone) };
   }
@@ -74,8 +80,9 @@ export class CardStatusService {
     });
     const cardCountByDeck = new Map(decks.map((d) => [d.id, d.cardCount]));
 
+    // Cards excluidos (soft delete) nao contam, mesmo que o usuario tenha estado de revisao.
     const states = await this.prisma.cardState.findMany({
-      where: { userId, deckId: { in: deckIds } },
+      where: { userId, deckId: { in: deckIds }, card: { deletedAt: null } },
       select: { deckId: true, state: true, due: true, scheduledDays: true },
     });
 
@@ -97,28 +104,19 @@ export class CardStatusService {
     for (const st of states) {
       const bucket = stats.get(st.deckId);
       if (!bucket) continue;
-
-      // CardState existe para este card do usuario, entao nao conta como NEW,
-      // a nao ser que state ainda seja NEW.
-      if (st.state !== CardLearningState.NEW) {
-        bucket.newCount = Math.max(0, bucket.newCount - 1);
-      }
-
-      const mastered =
-        st.state === CardLearningState.REVIEW && st.scheduledDays >= MASTERY_THRESHOLD_DAYS;
-      if (mastered) {
-        bucket.masteredCount += 1;
-        continue; // MASTERED nao conta pra dueToday/overdue
-      }
       if (st.state === CardLearningState.NEW) {
-        continue;
+        continue; // continua contando como novo
       }
+      bucket.newCount = Math.max(0, bucket.newCount - 1);
 
+      // Mesma ordem de computeStatus: vencido antes de dominado.
       const dueMs = st.due.getTime();
       if (dueMs < startToday) {
         bucket.overdue += 1;
       } else if (dueMs < startTomorrow) {
         bucket.dueToday += 1;
+      } else if (isMastered(st)) {
+        bucket.masteredCount += 1;
       }
     }
 

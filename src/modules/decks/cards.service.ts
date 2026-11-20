@@ -4,6 +4,7 @@ import { ErrorCode } from '../../common/errors/error-code';
 import { PrismaService } from '../../prisma/prisma.service';
 import { encodeCursor, decodeCursor } from '../../common/pagination/cursor';
 import { CardStatusService } from './card-status.service';
+import { accessibleDeckWhere } from './deck-access';
 import { CardsFilter, type ListCardsQueryDto } from './dto/cards.dto';
 import type { CardItemDto, CardListResponseDto, CreateCardDto, UpdateCardDto } from './dto/cards.dto';
 
@@ -206,14 +207,7 @@ export class CardsService {
 
   private async assertVisibleDeck(userId: string, deckId: string): Promise<void> {
     const deck = await this.prisma.deck.findFirst({
-      where: {
-        id: deckId,
-        deletedAt: null,
-        OR: [
-          { ownerId: userId },
-          { AND: [{ hiddenAt: null }, { saves: { some: { userId } } }] },
-        ],
-      },
+      where: { id: deckId, ...accessibleDeckWhere(userId) },
       select: { id: true },
     });
     if (!deck) {
