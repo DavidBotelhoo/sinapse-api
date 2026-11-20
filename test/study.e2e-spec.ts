@@ -103,6 +103,12 @@ describe('Estudo: sessao inteira + estatisticas e agenda (e2e)', () => {
     expect(deckRes.status).toBe(201);
     const deckId = deckRes.body.id as string;
 
+    // Nunca estudado: sem lastStudiedAt.
+    const mineBefore = await a.get('/v1/decks?scope=mine');
+    expect(mineBefore.body.items).toEqual([
+      expect.objectContaining({ id: deckId, lastStudiedAt: null }),
+    ]);
+
     // --- GET /study/overview: tudo novo, nada para hoje ---
     const overview = await a.get('/v1/study/overview');
     expect(overview.status).toBe(200);
@@ -169,8 +175,34 @@ describe('Estudo: sessao inteira + estatisticas e agenda (e2e)', () => {
       'Q4',
     ]);
     expect(created.body.cards[0]).toMatchObject({ deckId, year: 1, status: 'NEW', answer: 'R1' });
+    expect(created.body).toMatchObject({
+      mode: 'custom',
+      startedAt: expect.any(String),
+      finishedAt: null,
+      reviewedCardIds: [],
+    });
     const sessionId = created.body.sessionId as string;
     const cardIds = created.body.cards.map((c: { id: string }) => c.id) as string[];
+
+    // --- GET /study/sessions/:id: a mesma sessao, para retomar ---
+    const fetched = await a.get(`/v1/study/sessions/${sessionId}`);
+    expect(fetched.status).toBe(200);
+    expect(fetched.body).toMatchObject({
+      sessionId,
+      mode: 'custom',
+      total: 4,
+      order: 'DUE_FIRST',
+      startedAt: created.body.startedAt,
+      finishedAt: null,
+      reviewedCardIds: [],
+    });
+    expect(fetched.body.cards.map((c: { id: string }) => c.id)).toEqual(cardIds);
+
+    const foreignGet = await b.get(`/v1/study/sessions/${sessionId}`);
+    expect(foreignGet.status).toBe(404);
+    expect(foreignGet.body.error.code).toBe('STUDY_SESSION_NOT_FOUND');
+    const missingGet = await a.get(`/v1/study/sessions/${randomUUID()}`);
+    expect(missingGet.status).toBe(404);
 
     // --- Avaliacoes: Errei, Dificil, Facil, Facil ---
     const ratings = [
@@ -193,7 +225,25 @@ describe('Estudo: sessao inteira + estatisticas e agenda (e2e)', () => {
         total: 4,
       });
       expect(new Date(res.body.due).getTime()).toBeGreaterThan(before);
+
+      if (i === 1) {
+        // No meio da sessao: o GET diz o que ja foi avaliado.
+        const mid = await a.get(`/v1/study/sessions/${sessionId}`);
+        expect(mid.status).toBe(200);
+        expect([...mid.body.reviewedCardIds].sort()).toEqual([cardIds[0], cardIds[1]].sort());
+        expect(mid.body.finishedAt).toBeNull();
+      }
     }
+
+    // Estudado: lastStudiedAt na lista e nos recentes.
+    const mineAfter = await a.get('/v1/decks?scope=mine');
+    const studiedAt = mineAfter.body.items[0].lastStudiedAt as string;
+    expect(new Date(studiedAt).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    const recent = await a.get('/v1/decks/recent?limit=4');
+    expect(recent.status).toBe(200);
+    expect(recent.body).toEqual([
+      expect.objectContaining({ id: deckId, lastStudiedAt: studiedAt }),
+    ]);
 
     // CardState e ReviewLog gravados na mesma transacao, com o tempo limitado.
     const state = await prisma.cardState.findUniqueOrThrow({
@@ -260,6 +310,10 @@ describe('Estudo: sessao inteira + estatisticas e agenda (e2e)', () => {
     expect(again.body.finishedAt).toBe(finish.body.finishedAt);
     expect(again.body.counts).toEqual(finish.body.counts);
 
+    const finishedGet = await a.get(`/v1/study/sessions/${sessionId}`);
+    expect(finishedGet.body.finishedAt).toBe(finish.body.finishedAt);
+    expect([...finishedGet.body.reviewedCardIds].sort()).toEqual([...cardIds].sort());
+
     const afterFinish = await a
       .post(`/v1/study/sessions/${sessionId}/reviews`)
       .set('Origin', ORIGIN)
@@ -272,6 +326,7 @@ describe('Estudo: sessao inteira + estatisticas e agenda (e2e)', () => {
     expect(repeat.status).toBe(201);
     expect(repeat.body.sessionId).not.toBe(sessionId);
     expect(repeat.body.cards.map((c: { id: string }) => c.id)).toEqual(cardIds);
+    expect(repeat.body).toMatchObject({ mode: 'custom', finishedAt: null, reviewedCardIds: [] });
 
     // Uma avaliacao no repeat: o streak nao "aumenta" de novo no mesmo dia.
     const repeatReview = await a
@@ -333,6 +388,17 @@ describe('Estudo: sessao inteira + estatisticas e agenda (e2e)', () => {
     const [r1, r2] = await Promise.all([send(), send()]);
     expect([r1.status, r2.status].sort()).toEqual([201, 409]);
     expect(await prisma.reviewLog.count({ where: { sessionId: race.body.sessionId } })).toBe(1);
+
+    // --- Revisao de hoje: mode "today" no create e no GET ---
+    await prisma.cardState.updateMany({
+      where: { userId: userA },
+      data: { due: new Date(Date.now() - 60_000) },
+    });
+    const today = await a.post('/v1/study/sessions').set('Origin', ORIGIN).send({ mode: 'today' });
+    expect(today.status).toBe(201);
+    expect(today.body.mode).toBe('today');
+    const todayGet = await a.get(`/v1/study/sessions/${today.body.sessionId}`);
+    expect(todayGet.body.mode).toBe('today');
   });
 
   it('rotas de estudo exigem login', async () => {
