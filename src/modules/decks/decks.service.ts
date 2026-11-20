@@ -8,10 +8,7 @@ import { ImportStatus } from '../../generated/prisma/enums';
 import type { Env } from '../../config/env';
 import { CardStatusService } from './card-status.service';
 import { accessibleDeckWhere } from './deck-access';
-import {
-  DeckScope,
-  type ListDecksQueryDto,
-} from './dto/list-decks.query.dto';
+import { DeckScope, type ListDecksQueryDto } from './dto/list-decks.query.dto';
 import type { CreateDeckDto } from './dto/create-deck.dto';
 import type { UpdateDeckDto } from './dto/update-deck.dto';
 import type {
@@ -110,16 +107,17 @@ export class DecksService {
     const counts = await this.computeCounts(userId, baseFilters);
 
     const deckIds = page.map((d) => d.id);
-    const [stats, favs] = await Promise.all([
+    const [stats, favs, lastStudied] = await Promise.all([
       this.cardStatus.deckStatsFor(userId, deckIds, timezone),
       this.prisma.deckFavorite.findMany({
         where: { userId, deckId: { in: deckIds } },
         select: { deckId: true },
       }),
+      this.lastStudiedFor(userId, deckIds),
     ]);
     const favSet = new Set(favs.map((f) => f.deckId));
 
-    const items = page.map((d) => this.toListItem(d, userId, favSet, stats));
+    const items = page.map((d) => this.toListItem(d, userId, favSet, stats, lastStudied));
 
     return { items, nextCursor, counts };
   }
@@ -134,6 +132,10 @@ export class DecksService {
     });
     const ids = groups.map((g) => g.deckId);
     if (ids.length === 0) return [];
+    const lastStudied = new Map<string, Date>();
+    for (const g of groups) {
+      if (g._max.reviewedAt) lastStudied.set(g.deckId, g._max.reviewedAt);
+    }
 
     const decks = await this.prisma.deck.findMany({
       where: { id: { in: ids } },
@@ -151,7 +153,22 @@ export class DecksService {
     ]);
     const favSet = new Set(favs.map((f) => f.deckId));
 
-    return ordered.map((d) => this.toListItem(d, userId, favSet, stats));
+    return ordered.map((d) => this.toListItem(d, userId, favSet, stats, lastStudied));
+  }
+
+  // Ultima avaliacao do usuario em cada deck ("ha 2 horas").
+  private async lastStudiedFor(userId: string, deckIds: string[]): Promise<Map<string, Date>> {
+    const out = new Map<string, Date>();
+    if (deckIds.length === 0) return out;
+    const groups = await this.prisma.reviewLog.groupBy({
+      by: ['deckId'],
+      where: { userId, deckId: { in: deckIds } },
+      _max: { reviewedAt: true },
+    });
+    for (const g of groups) {
+      if (g._max.reviewedAt) out.set(g.deckId, g._max.reviewedAt);
+    }
+    return out;
   }
 
   async create(userId: string, dto: CreateDeckDto): Promise<DeckDetailDto> {
@@ -398,10 +415,7 @@ export class DecksService {
         return {
           ...base,
           favorites: { some: { userId } },
-          OR: [
-            { ownerId: userId },
-            { AND: [{ hiddenAt: null }, { saves: { some: { userId } } }] },
-          ],
+          OR: [{ ownerId: userId }, { AND: [{ hiddenAt: null }, { saves: { some: { userId } } }] }],
         };
       case DeckScope.ALL:
       default:
@@ -499,9 +513,11 @@ export class DecksService {
     userId: string,
     favorites: Set<string>,
     stats: Map<string, { dueToday: number; overdue: number; masteryPct: number }>,
+    lastStudied: Map<string, Date>,
   ): DeckListItemDto {
     const isMine = deck.ownerId === userId;
     const st = stats.get(deck.id);
+    const studiedAt = lastStudied.get(deck.id);
     return {
       id: deck.id,
       name: deck.name,
@@ -516,6 +532,7 @@ export class DecksService {
       overdue: st?.overdue ?? 0,
       masteryPct: st?.masteryPct ?? 0,
       contentUpdatedAt: deck.contentUpdatedAt.toISOString(),
+      lastStudiedAt: studiedAt ? studiedAt.toISOString() : null,
     };
   }
 
@@ -555,8 +572,7 @@ export class DecksService {
     const correctReviews = reviewAgg
       .filter((r) => r.rating === 'HARD' || r.rating === 'GOOD')
       .reduce((acc, r) => acc + r._count._all, 0);
-    const accuracy =
-      totalReviews > 0 ? Math.round((correctReviews * 100) / totalReviews) : null;
+    const accuracy = totalReviews > 0 ? Math.round((correctReviews * 100) / totalReviews) : null;
 
     const myStats: MyStatsDto = {
       masteryPct: stats.masteryPct,

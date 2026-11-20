@@ -40,6 +40,14 @@ export class DeckListItemDto {
   @ApiProperty({ example: 42, description: '0..100 arredondado.' }) masteryPct!: number;
 
   @ApiProperty({ format: 'date-time' }) contentUpdatedAt!: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'Ultima avaliacao do usuario neste deck ("ha 2 horas"). Null se nunca estudou.',
+  })
+  lastStudiedAt!: string | null;
 }
 
 export class DeckListCountsDto {
