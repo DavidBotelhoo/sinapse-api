@@ -559,6 +559,30 @@ export class StudyService {
     return this.sessionPayload(session, statusByCard);
   }
 
+  // ----------------- GET /study/sessions/:id -----------------
+
+  async getSession(userId: string, sessionId: string): Promise<StudySessionDto> {
+    const session = await this.findOwnSession(userId, sessionId);
+    const tz = await loadUserTimezone(this.prisma, userId);
+
+    const [statuses, reviews] = await Promise.all([
+      this.cardStatus.cardStatusesFor(userId, session.cardIds, tz),
+      this.prisma.reviewLog.findMany({
+        where: { sessionId: session.id, userId },
+        select: { cardId: true },
+        distinct: ['cardId'],
+      }),
+    ]);
+    const statusByCard = new Map<string, CardStatus>(
+      [...statuses.entries()].map(([id, s]) => [id, s.status]),
+    );
+    return this.sessionPayload(
+      session,
+      statusByCard,
+      reviews.map((r) => r.cardId),
+    );
+  }
+
   // ----------------- helpers -----------------
 
   private async findOwnSession(userId: string, sessionId: string): Promise<SessionRow> {
@@ -570,6 +594,7 @@ export class StudyService {
   private async sessionPayload(
     session: SessionRow,
     statusByCard: Map<string, CardStatus>,
+    reviewedCardIds: string[] = [],
   ): Promise<StudySessionDto> {
     const cards = await this.prisma.card.findMany({
       where: { id: { in: session.cardIds } },
@@ -586,10 +611,19 @@ export class StudyService {
       status: statusByCard.get(c.id) ?? 'NEW',
     }));
 
+    // A revisao de hoje e a unica sessao sem decks nem materias (o create exige um dos dois).
+    const mode =
+      session.deckIds.length === 0 && session.subjectIds.length === 0 ? 'today' : 'custom';
+    const inSession = new Set(items.map((c) => c.id));
+
     return {
       sessionId: session.id,
+      mode,
       total: items.length,
       order: session.order,
+      startedAt: session.startedAt.toISOString(),
+      finishedAt: session.finishedAt ? session.finishedAt.toISOString() : null,
+      reviewedCardIds: reviewedCardIds.filter((id) => inSession.has(id)),
       subjects: this.subjectsOf(session, ordered),
       cards: items,
     };

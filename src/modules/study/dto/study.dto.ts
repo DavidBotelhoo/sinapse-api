@@ -149,10 +149,32 @@ export class StudyCardDto {
   status!: CardStatusValue;
 }
 
+export const SESSION_MODES = ['today', 'custom'] as const;
+export type SessionModeValue = (typeof SESSION_MODES)[number];
+
 export class StudySessionDto {
   @ApiProperty() sessionId!: string;
+  @ApiProperty({
+    enum: SESSION_MODES,
+    description: '"today" = Revisao de hoje; "custom" = montada por materia ou por deck.',
+  })
+  mode!: SessionModeValue;
   @ApiProperty({ example: 20 }) total!: number;
   @ApiProperty({ enum: StudyOrder }) order!: StudyOrder;
+  @ApiProperty({ format: 'date-time' }) startedAt!: string;
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'Preenchido depois do finish.',
+  })
+  finishedAt!: string | null;
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    description: 'Cards ja avaliados nesta sessao, para continuar de onde parou.',
+  })
+  reviewedCardIds!: string[];
   @ApiProperty({
     type: DeckSubjectDto,
     isArray: true,

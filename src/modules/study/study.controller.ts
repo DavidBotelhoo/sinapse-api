@@ -73,6 +73,23 @@ export class StudyController {
     return this.study.createSession(user.id, dto);
   }
 
+  @Get('sessions/:id')
+  @ApiOperation({
+    summary: 'Uma sessao com os cards, o que ja foi avaliado e se terminou (para retomar).',
+  })
+  @ApiOkResponse({ type: StudySessionDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'STUDY_SESSION_NOT_FOUND',
+  })
+  async get(
+    @CurrentUser() user: CurrentUserInfo,
+    @Param('id', sessionIdPipe) sessionId: string,
+  ): Promise<StudySessionDto> {
+    return this.study.getSession(user.id, sessionId);
+  }
+
   @Post('sessions/:id/reviews')
   @RequiresActiveSubscription()
   @ApiOperation({ summary: 'Avalia um card da sessao (FSRS) e grava o ReviewLog.' })
