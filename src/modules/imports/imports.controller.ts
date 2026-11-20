@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { RequiresActiveSubscription } from '../../common/auth/requires-active-subscription.guard';
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
 import { ImportsService, MAX_IMPORT_BYTES } from './imports.service';
@@ -30,6 +31,7 @@ export class ImportsController {
   constructor(private readonly imports: ImportsService) {}
 
   @Post()
+  @RequiresActiveSubscription()
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

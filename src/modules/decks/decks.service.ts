@@ -7,6 +7,7 @@ import { encodeCursor, decodeCursor } from '../../common/pagination/cursor';
 import { ImportStatus } from '../../generated/prisma/enums';
 import type { Env } from '../../config/env';
 import { CardStatusService } from './card-status.service';
+import { accessibleDeckWhere } from './deck-access';
 import {
   DeckScope,
   type ListDecksQueryDto,
@@ -404,13 +405,7 @@ export class DecksService {
         };
       case DeckScope.ALL:
       default:
-        return {
-          ...base,
-          OR: [
-            { ownerId: userId },
-            { AND: [{ hiddenAt: null }, { saves: { some: { userId } } }] },
-          ],
-        };
+        return { ...base, ...accessibleDeckWhere(userId) };
     }
   }
 
@@ -429,14 +424,7 @@ export class DecksService {
 
   private async loadVisibleDeck(userId: string, deckId: string): Promise<DeckWithRelations> {
     const deck = await this.prisma.deck.findFirst({
-      where: {
-        id: deckId,
-        deletedAt: null,
-        OR: [
-          { ownerId: userId },
-          { AND: [{ hiddenAt: null }, { saves: { some: { userId } } }] },
-        ],
-      },
+      where: { id: deckId, ...accessibleDeckWhere(userId) },
       select: DECK_SELECT,
     });
     if (!deck) {

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsTimeZone, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ThemePreference } from '../../../generated/prisma/enums';
 
@@ -30,5 +30,6 @@ export class UpdateMeDto {
   @IsString({ message: 'Fuso horario invalido.' })
   @MinLength(1, { message: 'Fuso horario invalido.' })
   @MaxLength(64, { message: 'Fuso horario invalido.' })
+  @IsTimeZone({ message: 'Fuso horario invalido.' })
   timezone?: string;
 }

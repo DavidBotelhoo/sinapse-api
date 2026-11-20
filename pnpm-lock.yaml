@@ -86,6 +86,9 @@ importers:
       sharp:
         specifier: ^0.35.5
         version: 0.35.5(@types/node@22.20.5)
+      ts-fsrs:
+        specifier: ^5.4.2
+        version: 5.4.2
       unpdf:
         specifier: ^2.2.1
         version: 2.2.1
@@ -3939,6 +3942,10 @@ packages:
     engines: {node: '>=18.12'}
     peerDependencies:
       typescript: '>=4.8.4'
+
+  ts-fsrs@5.4.2:
+    resolution: {integrity: sha512-z4qop4pzTcyTzuJ566d9EaX/4bZZzhYfeaPImfVr+xcYT65c5oBgFDijUhCE/D+C78eaolHIhKRZ04/RwF+v2g==}
+    engines: {node: '>=20.0.0'}
 
   ts-jest@29.4.15:
     resolution: {integrity: sha512-s2qmEUYFRqbjz1wv0EmccNPVOb45HOFpFuhzQJLKShYVisuTbCFPIIAIV2EuK5rIxb4BejLDbH7dnBZfYjybUQ==}
@@ -8352,6 +8359,8 @@ snapshots:
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
+
+  ts-fsrs@5.4.2: {}
 
   ts-jest@29.4.15(@babel/core@7.29.13)(@jest/transform@29.7.0)(@jest/types@30.5.1)(babel-jest@29.7.0(@babel/core@7.29.13))(jest-util@29.7.0)(jest@29.7.0(@types/node@22.20.5)(ts-node@10.9.2(@swc/core@1.16.22)(@types/node@22.20.5)(typescript@5.9.3)))(typescript@5.9.3):
     dependencies:
