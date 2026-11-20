@@ -12,6 +12,8 @@ import { StorageModule } from './modules/storage/storage.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { DecksModule } from './modules/decks/decks.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { StudyModule } from './modules/study/study.module';
+import { StatsModule } from './modules/stats/stats.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { ImportsModule } from './modules/imports/imports.module';
     CatalogModule,
     DecksModule,
     ImportsModule,
+    StudyModule,
+    StatsModule,
   ],
   controllers: [],
   providers: [],
