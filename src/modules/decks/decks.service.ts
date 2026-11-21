@@ -1,11 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-code';
 import { PrismaService } from '../../prisma/prisma.service';
 import { encodeCursor, decodeCursor } from '../../common/pagination/cursor';
 import { ImportStatus } from '../../generated/prisma/enums';
-import type { Env } from '../../config/env';
+import { resolveUserCourseId } from '../catalog/user-course';
+import { StorageService } from '../storage/storage.service';
+import { PUBLIC_OWNER_SELECT, toPublicOwner } from '../users/public-owner';
 import { CardStatusService } from './card-status.service';
 import { accessibleDeckWhere } from './deck-access';
 import { DeckScope, type ListDecksQueryDto } from './dto/list-decks.query.dto';
@@ -47,26 +48,16 @@ const DECK_SELECT = {
   subjects: {
     select: { subject: { select: { id: true, slug: true, name: true } } },
   },
-  owner: { select: { firstName: true, avatarKey: true } },
+  owner: { select: PUBLIC_OWNER_SELECT },
 } as const;
 
 @Injectable()
 export class DecksService {
-  private readonly avatarBaseUrl: string;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly cardStatus: CardStatusService,
-    config: ConfigService<Env, true>,
-  ) {
-    const explicit = config.get('STORAGE_PUBLIC_URL', { infer: true });
-    if (explicit) {
-      this.avatarBaseUrl = explicit.replace(/\/+$/, '');
-    } else {
-      const port = config.get('PORT', { infer: true });
-      this.avatarBaseUrl = `http://localhost:${port}/uploads`;
-    }
-  }
+    private readonly storage: StorageService,
+  ) {}
 
   async list(
     userId: string,
@@ -405,17 +396,17 @@ export class DecksService {
       case DeckScope.MINE:
         return { ...base, ownerId: userId };
       case DeckScope.COMMUNITY:
+        // Salvos da Comunidade, inclusive os que a moderacao ocultou depois.
         return {
           ...base,
-          hiddenAt: null,
           ownerId: { not: userId },
           saves: { some: { userId } },
         };
       case DeckScope.FAVORITES:
         return {
           ...base,
+          ...accessibleDeckWhere(userId),
           favorites: { some: { userId } },
-          OR: [{ ownerId: userId }, { AND: [{ hiddenAt: null }, { saves: { some: { userId } } }] }],
         };
       case DeckScope.ALL:
       default:
@@ -480,17 +471,8 @@ export class DecksService {
     }
   }
 
-  private async resolveCourseId(userId: string): Promise<string> {
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { courseId: true },
-    });
-    if (user.courseId) return user.courseId;
-    const fallback = await this.prisma.course.findUniqueOrThrow({
-      where: { slug: 'medicina' },
-      select: { id: true },
-    });
-    return fallback.id;
+  private resolveCourseId(userId: string): Promise<string> {
+    return resolveUserCourseId(this.prisma, userId);
   }
 
   private pairsFromImport(raw: unknown): Array<{ question: string; answer: string | null }> {
@@ -601,9 +583,6 @@ export class DecksService {
   }
 
   private ownerSummary(owner: { firstName: string; avatarKey: string | null }): DeckOwnerDto {
-    return {
-      firstName: owner.firstName,
-      avatarUrl: owner.avatarKey ? `${this.avatarBaseUrl}/${owner.avatarKey}` : null,
-    };
+    return toPublicOwner(owner, (key) => this.storage.publicUrl(key));
   }
 }

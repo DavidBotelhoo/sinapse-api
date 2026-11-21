@@ -24,11 +24,13 @@ import {
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DeckReportsService } from './deck-reports.service';
 import { DecksService } from './decks.service';
 import { CreateDeckDto } from './dto/create-deck.dto';
 import { UpdateDeckDto } from './dto/update-deck.dto';
 import { ListDecksQueryDto } from './dto/list-decks.query.dto';
 import { AppendImportDto } from './dto/cards.dto';
+import { ReportDeckDto } from './dto/report-deck.dto';
 import {
   DeckDetailDto,
   DeckListItemDto,
@@ -41,6 +43,7 @@ import {
 export class DecksController {
   constructor(
     private readonly decks: DecksService,
+    private readonly reports: DeckReportsService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -161,6 +164,28 @@ export class DecksController {
     @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
   ): Promise<void> {
     await this.decks.unsave(user.id, deckId);
+  }
+
+  @Post(':id/report')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({
+    description:
+      'Denuncia registrada. Uma por usuario e deck: repetir troca o motivo e reabre a denuncia.',
+  })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description:
+      'DECK_NOT_FOUND: deck privado, excluido, do proprio usuario ou ocultado (para quem nao salvou).',
+  })
+  async report(
+    @CurrentUser() user: CurrentUserInfo,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Body() dto: ReportDeckDto,
+  ): Promise<void> {
+    await this.reports.report(user.id, deckId, dto);
   }
 
   private async timezone(userId: string): Promise<string> {

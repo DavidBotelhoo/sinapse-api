@@ -3,14 +3,15 @@ import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-code';
 import { startOfTodayUtc, startOfTomorrowUtc } from '../../common/time/user-day';
 import { loadUserTimezone } from '../../common/time/user-timezone';
+import type { Prisma } from '../../generated/prisma/client';
 import { CardLearningState, ReviewRating, StudyOrder } from '../../generated/prisma/enums';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CardStatusService, type CardStatus } from '../decks/card-status.service';
 import { accessibleDeckWhere } from '../decks/deck-access';
-import type { DeckOwnerDto } from '../decks/dto/common.dto';
 import { accuracyPct } from '../stats/accuracy';
 import { StatsService } from '../stats/stats.service';
 import { StorageService } from '../storage/storage.service';
+import { PUBLIC_OWNER_SELECT, toPublicOwner } from '../users/public-owner';
 import {
   StudyMode,
   type CreateReviewDto,
@@ -108,7 +109,7 @@ export class StudyService {
         year: true,
         cardCount: true,
         ownerId: true,
-        owner: { select: { firstName: true, avatarKey: true } },
+        owner: { select: PUBLIC_OWNER_SELECT },
         subjects: SUBJECTS_SELECT,
       },
     });
@@ -146,7 +147,7 @@ export class StudyService {
         subjects: deck.subjects.map((s) => s.subject),
         cardCount: deck.cardCount,
         isMine,
-        owner: isMine ? null : this.ownerSummary(deck.owner),
+        owner: isMine ? null : toPublicOwner(deck.owner, (k) => this.storage.publicUrl(k)),
         dueToday: deckDue,
         overdue: deckOverdue,
         newCount: deckNew,
@@ -484,7 +485,7 @@ export class StudyService {
         select: { cardId: true },
       }),
       this.prisma.card.findMany({
-        where: { id: { in: session.cardIds } },
+        where: this.sessionCardsWhere(userId, session.cardIds),
         select: CARD_FOR_SESSION_SELECT,
       }),
     ]);
@@ -591,13 +592,19 @@ export class StudyService {
     return session;
   }
 
+  // Cards de uma sessao que o usuario ainda pode ver: se ele removeu o deck dos salvos
+  // (ou o dono excluiu o card) depois de comecar, o card some ao retomar e do resumo.
+  private sessionCardsWhere(userId: string, cardIds: string[]): Prisma.CardWhereInput {
+    return { id: { in: cardIds }, deletedAt: null, deck: accessibleDeckWhere(userId) };
+  }
+
   private async sessionPayload(
     session: SessionRow,
     statusByCard: Map<string, CardStatus>,
     reviewedCardIds: string[] = [],
   ): Promise<StudySessionDto> {
     const cards = await this.prisma.card.findMany({
-      where: { id: { in: session.cardIds } },
+      where: this.sessionCardsWhere(session.userId, session.cardIds),
       select: CARD_FOR_SESSION_SELECT,
     });
     const byId = new Map(cards.map((c) => [c.id, c]));
@@ -665,13 +672,6 @@ export class StudyService {
       select: { durationMs: true },
     });
     return averageMsPerCard(recent.map((r) => r.durationMs));
-  }
-
-  private ownerSummary(owner: { firstName: string; avatarKey: string | null }): DeckOwnerDto {
-    return {
-      firstName: owner.firstName,
-      avatarUrl: owner.avatarKey ? this.storage.publicUrl(owner.avatarKey) : null,
-    };
   }
 
   private validation(fields: Record<string, string>): AppException {
