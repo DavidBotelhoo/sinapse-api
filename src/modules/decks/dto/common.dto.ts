@@ -12,11 +12,17 @@ export class DeckSubjectDto {
   name!: string;
 }
 
+// Dono de um deck visto por outra pessoa: so o primeiro nome e a miniatura do avatar.
 export class DeckOwnerDto {
   @ApiProperty({ example: 'Davi' })
   firstName!: string;
 
-  @ApiProperty({ nullable: true, example: null })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: null,
+    description: 'Miniatura de 64px do avatar. Null se a pessoa nao tem foto.',
+  })
   avatarUrl!: string | null;
 }
 

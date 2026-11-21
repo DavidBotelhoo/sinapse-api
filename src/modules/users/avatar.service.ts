@@ -5,6 +5,7 @@ import { ErrorCode } from '../../common/errors/error-code';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UserMapper } from './user.mapper';
+import { AVATAR_LARGE_SIZE, AVATAR_THUMB_SIZE, avatarKeyFor, avatarThumbKey } from './public-owner';
 import type { MeResponseDto } from './dto/me-response.dto';
 
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -72,12 +73,12 @@ export class AvatarService {
     }
 
     const [large, thumb] = await Promise.all([
-      this.encode(file.buffer, 256),
-      this.encode(file.buffer, 64),
+      this.encode(file.buffer, AVATAR_LARGE_SIZE),
+      this.encode(file.buffer, AVATAR_THUMB_SIZE),
     ]);
 
-    const key = `avatars/${userId}.webp`;
-    const thumbKey = `avatars/${userId}-64.webp`;
+    const key = avatarKeyFor(userId);
+    const thumbKey = avatarThumbKey(key)!;
 
     await Promise.all([
       this.storage.putObject({ key, body: large, contentType: AVATAR_MIME }),
