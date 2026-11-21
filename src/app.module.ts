@@ -14,6 +14,7 @@ import { DecksModule } from './modules/decks/decks.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { StudyModule } from './modules/study/study.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { CommunityModule } from './modules/community/community.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { StatsModule } from './modules/stats/stats.module';
     ImportsModule,
     StudyModule,
     StatsModule,
+    CommunityModule,
   ],
   controllers: [],
   providers: [],
