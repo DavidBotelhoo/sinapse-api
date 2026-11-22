@@ -101,6 +101,9 @@ pnpm start:dev              # API em http://localhost:3333 (docs em /docs)
 pnpm lint
 pnpm test                   # unitários
 pnpm test:e2e               # e2e
+pnpm users:set-role <email> <USER|ADMIN|SUPER_ADMIN>   # papel da conta (ADMIN e SUPER_ADMIN: acesso vitalício)
+pnpm billing:simulate <email> <aprovado|recusado|cancelado|teste-terminado> [--plano mensal|anual] [--dias-atras N]
+                            # só em dev, com a API rodando: evento assinado do provedor de teste
 ```
 
 ## Como trabalhar
