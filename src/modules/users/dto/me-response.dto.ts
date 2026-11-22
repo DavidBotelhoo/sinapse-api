@@ -1,27 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-export class SubscriptionSummaryDto {
-  @ApiProperty({
-    example: 'NONE',
-    enum: ['NONE', 'TRIALING', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED'],
-  })
-  status!: 'NONE' | 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED';
-
-  @ApiProperty({ nullable: true, enum: ['MONTHLY', 'YEARLY'], example: null })
-  plan!: 'MONTHLY' | 'YEARLY' | null;
-
-  @ApiProperty({ nullable: true, example: null })
-  trialEndsAt!: string | null;
-
-  @ApiProperty({ nullable: true, example: null })
-  currentPeriodEnd!: string | null;
-
-  @ApiProperty({ nullable: true, example: null })
-  paymentMethodLabel!: string | null;
-
-  @ApiProperty({ nullable: true, example: null })
-  graceUntil!: string | null;
-}
+import { UserRole } from '../../../generated/prisma/enums';
+import { SubscriptionSummaryDto } from '../../billing/dto/billing.dto';
 
 export class MeResponseDto {
   @ApiProperty({ example: '7f1f2c6c-5a2a-4e2e-8f1e-9c7f9e0a1b2c' })
@@ -44,6 +23,14 @@ export class MeResponseDto {
 
   @ApiProperty({ example: 'America/Sao_Paulo' })
   timezone!: string;
+
+  @ApiProperty({
+    enum: UserRole,
+    enumName: 'UserRole',
+    example: 'USER',
+    description: 'ADMIN e SUPER_ADMIN tem acesso vitalicio.',
+  })
+  role!: UserRole;
 
   @ApiProperty({ nullable: true, example: null })
   courseId!: string | null;

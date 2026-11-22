@@ -12,7 +12,11 @@ import { createValidationPipe } from './common/validation/validation-pipe.factor
 import { setupSwagger } from './common/swagger/setup-swagger';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  // rawBody: o webhook de cobranca confere a assinatura com o corpo exatamente como chegou.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
 
   app.useLogger(app.get(Logger));
   app.flushLogs();

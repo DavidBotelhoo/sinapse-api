@@ -68,7 +68,8 @@ describe('Auth flow (e2e)', () => {
     const meRes = await setCommonHeaders(agent.get('/v1/me'));
     expect(meRes.status).toBe(200);
     expect(meRes.body.email).toBe(email);
-    expect(meRes.body.subscription.status).toBe('NONE');
+    // Conta nova ja entra no teste gratis (etapa 11).
+    expect(meRes.body.subscription).toMatchObject({ status: 'TRIALING', hasAccess: true });
 
     // refresh -> deve rotacionar os cookies
     const refreshRes = await setCommonHeaders(agent.post('/v1/auth/refresh'));

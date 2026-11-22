@@ -9,7 +9,8 @@ type AnyFn = (...args: unknown[]) => unknown;
 
 function makeConfig(): ConfigService<Env, true> {
   return {
-    get: (key: string) => (key === 'WEB_URL' ? 'http://localhost:3000' : undefined),
+    get: (key: string) =>
+      ({ WEB_URL: 'http://localhost:3000', BILLING_TRIAL_DAYS: 7 })[key] as unknown,
   } as unknown as ConfigService<Env, true>;
 }
 
@@ -104,7 +105,25 @@ describe('AuthService', () => {
         { firstName: 'A', lastName: 'B', email: 'a@b.com', password: 'uma-senha-forte' },
         ctx,
       );
-      expect(prisma.user.create).toHaveBeenCalled();
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            subscription: {
+              create: {
+                provider: 'none',
+                status: 'TRIALING',
+                trialEndsAt: expect.any(Date),
+              },
+            },
+          }),
+        }),
+      );
+      const trialEndsAt = (prisma.user.create.mock.calls[0] as [
+        { data: { subscription: { create: { trialEndsAt: Date } } } },
+      ])[0].data.subscription.create.trialEndsAt;
+      const days = (trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+      expect(days).toBeGreaterThan(6.99);
+      expect(days).toBeLessThanOrEqual(7);
       expect(tokens.issueFor).toHaveBeenCalledWith('u1', 'a@b.com', ctx);
       expect(result.user.id).toBe('u1');
     });

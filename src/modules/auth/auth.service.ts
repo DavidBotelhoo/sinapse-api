@@ -8,6 +8,7 @@ import type { Env } from '../../config/env';
 import type { MeResponseDto } from '../users/dto/me-response.dto';
 import { UserMapper } from '../users/user.mapper';
 import { MailService } from '../mail/mail.service';
+import { trialSubscription } from '../billing/trial';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -26,6 +27,7 @@ const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hora
 @Injectable()
 export class AuthService {
   private readonly webUrl: string;
+  private readonly trialDays: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -36,6 +38,7 @@ export class AuthService {
     config: ConfigService<Env, true>,
   ) {
     this.webUrl = config.get('WEB_URL', { infer: true }).replace(/\/+$/, '');
+    this.trialDays = config.get('BILLING_TRIAL_DAYS', { infer: true });
   }
 
   async register(dto: RegisterDto, ctx: SessionContext): Promise<AuthenticatedResult> {
@@ -50,19 +53,22 @@ export class AuthService {
 
     const passwordHash = await this.passwords.hash(dto.password);
 
-    const user = await this.prisma.user.create({
+    // Conta nova ja entra no teste gratis (mesma escrita do usuario: um nao existe sem o outro).
+    const { subscription, ...user } = await this.prisma.user.create({
       data: {
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
         passwordHash,
+        subscription: { create: trialSubscription(new Date(), this.trialDays) },
       },
+      include: { subscription: true },
     });
 
     const tokens = await this.tokens.issueFor(user.id, user.email, ctx);
 
     return {
-      user: this.userMapper.toMeResponse(user, null),
+      user: this.userMapper.toMeResponse(user, subscription),
       tokens,
     };
   }
