@@ -10,6 +10,13 @@ const envBoolean = (fallback: boolean) =>
     return v.toLowerCase() === 'true' || v === '1';
   }, z.boolean().default(fallback));
 
+// Inteiro do ambiente com valor padrao ("" ou ausente = padrao).
+const envInt = (schema: z.ZodNumber, fallback: number) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
+    z.coerce.number().pipe(schema).default(fallback),
+  );
+
 // Lista de pesos do FSRS separada por virgula ("0.40255,1.18385,..."). Vazio = padrao do ts-fsrs.
 const numberList = z.preprocess(
   (v) =>
@@ -42,8 +49,22 @@ const envSchema = z.object({
   MAIL_FROM: z.string().min(1).default('Sinapse <nao-responda@sinapse.app>'),
   SMTP_URL: z.string().min(1).default('smtp://localhost:1025'),
 
+  // Assinatura. Precos em centavos vem SO da configuracao (decisao em aberto 3); sem padrao
+  // no codigo de proposito: a API nao sobe sem eles.
   BILLING_PROVIDER: z.enum(['fake']).default('fake'),
-  BILLING_WEBHOOK_SECRET: emptyToUndefined(z.string()),
+  BILLING_WEBHOOK_SECRET: z
+    .string()
+    .min(32, 'BILLING_WEBHOOK_SECRET precisa de pelo menos 32 caracteres (openssl rand -hex 32)'),
+  BILLING_PRICE_MONTHLY_CENTS: z.coerce
+    .number()
+    .int()
+    .positive('BILLING_PRICE_MONTHLY_CENTS: preco do plano mensal em centavos'),
+  BILLING_PRICE_YEARLY_CENTS: z.coerce
+    .number()
+    .int()
+    .positive('BILLING_PRICE_YEARLY_CENTS: preco do plano anual em centavos'),
+  BILLING_TRIAL_DAYS: envInt(z.number().int().min(0).max(90), 7),
+  BILLING_GRACE_DAYS: envInt(z.number().int().min(0).max(30), 5),
 
   // Parametros do FSRS (ts-fsrs). Os padroes sao os da biblioteca; ficam aqui para otimizar depois.
   FSRS_REQUEST_RETENTION: emptyToUndefined(z.coerce.number().gt(0).lt(1)),

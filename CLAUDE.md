@@ -85,7 +85,10 @@ REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET=
 STORAGE_ENDPOINT=  STORAGE_BUCKET=  STORAGE_ACCESS_KEY=  STORAGE_SECRET_KEY=  STORAGE_PUBLIC_URL=
 MAIL_FROM="Sinapse <nao-responda@sinapse.app>"   SMTP_URL=smtp://localhost:1025
-BILLING_PROVIDER=fake   BILLING_WEBHOOK_SECRET=
+BILLING_PROVIDER=fake   BILLING_WEBHOOK_SECRET=            # segredo: obrigatório, mínimo 32 caracteres
+BILLING_PRICE_MONTHLY_CENTS=   BILLING_PRICE_YEARLY_CENTS=  # obrigatórios, em centavos (sem padrão no código)
+BILLING_TRIAL_DAYS=7   BILLING_GRACE_DAYS=5                # teste grátis no cadastro; prazo para trocar o cartão
+FSRS_REQUEST_RETENTION=  FSRS_MAXIMUM_INTERVAL=  FSRS_ENABLE_FUZZ=false  FSRS_WEIGHTS=   # opcionais; vazio = padrão do ts-fsrs
 ```
 
 ## Comandos

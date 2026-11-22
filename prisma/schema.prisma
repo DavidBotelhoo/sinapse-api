@@ -51,6 +51,13 @@ enum SubscriptionPlan {
   YEARLY
 }
 
+// Papel no app. ADMIN e SUPER_ADMIN tem acesso vitalicio (a assinatura nao vence).
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -96,6 +103,7 @@ model User {
   avatarKey         String? // chave no storage (R2/S3)
   theme             ThemePreference @default(SYSTEM)
   timezone          String          @default("America/Sao_Paulo")
+  role              UserRole        @default(USER)
   courseId          String?         @db.Uuid
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -307,13 +315,15 @@ model Subscription {
   provider               String // gateway escolhido
   providerCustomerId     String?
   providerSubscriptionId String?            @unique
-  plan                   SubscriptionPlan
+  plan                   SubscriptionPlan? // vazio no teste grátis (ainda não escolheu plano)
   status                 SubscriptionStatus
   trialEndsAt            DateTime?
   currentPeriodEnd       DateTime?
   cancelAtPeriodEnd      Boolean            @default(false)
   paymentMethodLabel     String? // ex.: "Visa final 4417" (só o que o gateway devolve; nunca o número)
   graceUntil             DateTime? // prazo para atualizar o cartão quando o pagamento foi recusado
+  paymentFailedAt        DateTime? // "Pagamento recusado em 15 nov"
+  lastEventAt            DateTime? // data do último evento do gateway aplicado (ignora eventos fora de ordem)
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
