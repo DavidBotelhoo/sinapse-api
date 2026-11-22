@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -17,6 +18,7 @@ import {
   ApiCookieAuth,
   ApiNoContentResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -98,5 +100,13 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
   ): Promise<MeResponseDto> {
     return this.avatars.uploadFor(user.id, file);
+  }
+
+  @Delete('avatar')
+  @ApiOperation({ summary: 'Remove a foto (as duas versoes). Sem foto, responde igual.' })
+  @ApiOkResponse({ type: MeResponseDto })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
+  async removeAvatar(@CurrentUser() user: CurrentUserInfo): Promise<MeResponseDto> {
+    return this.avatars.removeFor(user.id);
   }
 }

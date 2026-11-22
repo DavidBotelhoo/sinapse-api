@@ -29,10 +29,7 @@ function detectImageKind(buffer: Buffer): ImageKind | null {
   ) {
     return 'png';
   }
-  if (
-    buffer.toString('ascii', 0, 4) === 'RIFF' &&
-    buffer.toString('ascii', 8, 12) === 'WEBP'
-  ) {
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
     return 'webp';
   }
   return null;
@@ -89,6 +86,30 @@ export class AvatarService {
       where: { id: userId },
       data: { avatarKey: key },
     });
+
+    const subscription = await this.prisma.subscription.findUnique({ where: { userId } });
+    return this.userMapper.toMeResponse(user, subscription);
+  }
+
+  // "Remover" foto: apaga as duas versoes e zera a chave. Sem foto, nao muda nada.
+  async removeFor(userId: string): Promise<MeResponseDto> {
+    const current = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { avatarKey: true },
+    });
+
+    if (current.avatarKey) {
+      const thumbKey = avatarThumbKey(current.avatarKey);
+      // O storage ignora arquivo que nao existe.
+      await Promise.all([
+        this.storage.deleteObject(current.avatarKey),
+        thumbKey ? this.storage.deleteObject(thumbKey) : Promise.resolve(),
+      ]);
+    }
+
+    const user = current.avatarKey
+      ? await this.prisma.user.update({ where: { id: userId }, data: { avatarKey: null } })
+      : await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
     const subscription = await this.prisma.subscription.findUnique({ where: { userId } });
     return this.userMapper.toMeResponse(user, subscription);
