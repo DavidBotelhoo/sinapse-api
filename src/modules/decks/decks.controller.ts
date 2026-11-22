@@ -21,6 +21,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { RequiresActiveSubscription } from '../../common/auth/requires-active-subscription.guard';
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -70,6 +71,7 @@ export class DecksController {
   }
 
   @Post()
+  @RequiresActiveSubscription()
   @ApiCreatedResponse({ type: DeckDetailDto })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
@@ -114,6 +116,7 @@ export class DecksController {
   }
 
   @Post(':id/imports')
+  @RequiresActiveSubscription()
   @ApiOkResponse({ type: DeckDetailDto })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
