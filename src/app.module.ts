@@ -15,6 +15,7 @@ import { ImportsModule } from './modules/imports/imports.module';
 import { StudyModule } from './modules/study/study.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { CommunityModule } from './modules/community/community.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { CommunityModule } from './modules/community/community.module';
     StudyModule,
     StatsModule,
     CommunityModule,
+    BillingModule,
   ],
   controllers: [],
   providers: [],
