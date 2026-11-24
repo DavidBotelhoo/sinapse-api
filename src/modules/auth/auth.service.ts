@@ -46,7 +46,7 @@ export class AuthService {
     if (existing) {
       throw new AppException({
         code: ErrorCode.EMAIL_ALREADY_REGISTERED,
-        message: 'Esse email ja tem conta. Entre ou recupere a senha.',
+        message: 'Esse email já tem conta. Entre ou recupere a senha.',
         status: HttpStatus.CONFLICT,
       });
     }
@@ -76,6 +76,7 @@ export class AuthService {
   async login(dto: LoginDto, ctx: SessionContext): Promise<AuthenticatedResult> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user) {
+      await this.passwords.verifyAgainstNothing(dto.password);
       throw this.invalidCredentials();
     }
 
@@ -124,11 +125,7 @@ export class AuthService {
     });
 
     const resetUrl = `${this.webUrl}/redefinir-senha?token=${rawToken}`;
-    await this.mail.enqueuePasswordReset({
-      to: user.email,
-      firstName: user.firstName,
-      resetUrl,
-    });
+    await this.mail.enqueuePasswordReset({ to: user.email, resetUrl });
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
@@ -136,30 +133,38 @@ export class AuthService {
     const reset = await this.prisma.passwordReset.findUnique({ where: { tokenHash } });
 
     if (!reset || reset.usedAt || reset.expiresAt.getTime() <= Date.now()) {
-      throw new AppException({
-        code: ErrorCode.INVALID_RESET_TOKEN,
-        message: 'Este link expirou ou ja foi usado. Peca um novo.',
-        status: HttpStatus.BAD_REQUEST,
-      });
+      throw this.invalidResetToken();
     }
 
     const newHash = await this.passwords.hash(dto.password);
     const now = new Date();
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    await this.prisma.$transaction(async (tx) => {
+      // Uso unico mesmo com dois pedidos ao mesmo tempo: so um consegue marcar o token.
+      const claimed = await tx.passwordReset.updateMany({
+        where: { id: reset.id, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (claimed.count === 0) {
+        throw this.invalidResetToken();
+      }
+      await tx.user.update({
         where: { id: reset.userId },
         data: { passwordHash: newHash, passwordChangedAt: now },
-      }),
-      this.prisma.passwordReset.update({
-        where: { id: reset.id },
-        data: { usedAt: now },
-      }),
-      this.prisma.authSession.updateMany({
+      });
+      await tx.authSession.updateMany({
         where: { userId: reset.userId, revokedAt: null },
         data: { revokedAt: now },
-      }),
-    ]);
+      });
+    });
+  }
+
+  private invalidResetToken(): AppException {
+    return new AppException({
+      code: ErrorCode.INVALID_RESET_TOKEN,
+      message: 'Este link expirou ou já foi usado. Peça um novo.',
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 
   private hashResetToken(raw: string): string {
@@ -169,7 +174,7 @@ export class AuthService {
   private invalidCredentials(): AppException {
     return new AppException({
       code: ErrorCode.INVALID_CREDENTIALS,
-      message: 'Email ou senha nao conferem.',
+      message: 'Email ou senha não conferem.',
       status: HttpStatus.UNAUTHORIZED,
     });
   }
@@ -177,7 +182,7 @@ export class AuthService {
   private invalidSession(): AppException {
     return new AppException({
       code: ErrorCode.SESSION_INVALID,
-      message: 'Sessao invalida ou expirada. Entre de novo.',
+      message: 'Sessão inválida ou expirada. Entre de novo.',
       status: HttpStatus.UNAUTHORIZED,
     });
   }

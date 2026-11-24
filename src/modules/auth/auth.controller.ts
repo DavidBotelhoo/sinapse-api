@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Req,
-  Res,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -38,7 +30,14 @@ import {
 
 const ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
 
+// Os limites por rota usam os nomes dos limitadores do ThrottlerModule (short/long, em
+// auth.module.ts). Um nome que nao existe ali e ignorado em silencio.
 @ApiTags('auth')
+@ApiResponse({
+  status: HttpStatus.TOO_MANY_REQUESTS,
+  type: ErrorResponseDto,
+  description: 'TOO_MANY_REQUESTS: limite de tentativas por minuto.',
+})
 @Controller('auth')
 @Public()
 export class AuthController {
@@ -89,7 +88,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ short: { limit: 30, ttl: 60_000 } })
   @ApiNoContentResponse({ description: 'Cookies rotacionados.' })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
@@ -109,16 +108,17 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Throttle({ short: { limit: 3, ttl: 60_000 } })
   @ApiBody({ type: ForgotPasswordDto })
   @ApiNoContentResponse({ description: 'Pedido recebido (resposta uniforme).' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
   async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<void> {
     await this.auth.forgotPassword(dto);
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ short: { limit: 10, ttl: 60_000 } })
   @ApiBody({ type: ResetPasswordDto })
   @ApiNoContentResponse({ description: 'Senha redefinida.' })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })

@@ -6,19 +6,19 @@ export class RegisterDto {
   @ApiProperty({ example: 'Davi' })
   @IsString({ message: 'Informe seu nome.' })
   @MinLength(1, { message: 'Informe seu nome.' })
-  @MaxLength(80, { message: 'Use no maximo 80 caracteres.' })
+  @MaxLength(80, { message: 'Use no máximo 80 caracteres.' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   firstName!: string;
 
   @ApiProperty({ example: 'Botelho' })
   @IsString({ message: 'Informe seu sobrenome.' })
   @MinLength(1, { message: 'Informe seu sobrenome.' })
-  @MaxLength(120, { message: 'Use no maximo 120 caracteres.' })
+  @MaxLength(120, { message: 'Use no máximo 120 caracteres.' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   lastName!: string;
 
   @ApiProperty({ example: 'davi@example.com' })
-  @IsEmail({}, { message: 'Email invalido.' })
+  @IsEmail({}, { message: 'Email inválido.' })
   @MaxLength(254, { message: 'Email longo demais.' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,

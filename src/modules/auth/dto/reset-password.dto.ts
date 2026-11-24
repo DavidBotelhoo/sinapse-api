@@ -3,9 +3,9 @@ import { IsString, MaxLength, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
   @ApiProperty({ example: 'token-opaco-recebido-por-email' })
-  @IsString({ message: 'Token invalido.' })
-  @MinLength(1, { message: 'Token invalido.' })
-  @MaxLength(256, { message: 'Token invalido.' })
+  @IsString({ message: 'Token inválido.' })
+  @MinLength(1, { message: 'Token inválido.' })
+  @MaxLength(256, { message: 'Token inválido.' })
   token!: string;
 
   @ApiProperty({ example: 'uma-nova-senha' })

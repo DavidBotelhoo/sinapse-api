@@ -4,7 +4,7 @@ import { Transform } from 'class-transformer';
 
 export class ForgotPasswordDto {
   @ApiProperty({ example: 'davi@example.com' })
-  @IsEmail({}, { message: 'Email invalido.' })
+  @IsEmail({}, { message: 'Email inválido.' })
   @MaxLength(254, { message: 'Email longo demais.' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,

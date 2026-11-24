@@ -15,4 +15,12 @@ describe('PasswordService', () => {
     const b = await svc.hash('mesma-senha');
     expect(a).not.toBe(b);
   });
+
+  it('verifyAgainstNothing sempre falha e reaproveita o hash ficticio', async () => {
+    const local = new PasswordService();
+    const hashSpy = jest.spyOn(local, 'hash');
+    expect(await local.verifyAgainstNothing('qualquer')).toBe(false);
+    expect(await local.verifyAgainstNothing('outra')).toBe(false);
+    expect(hashSpy).toHaveBeenCalledTimes(1);
+  });
 });
