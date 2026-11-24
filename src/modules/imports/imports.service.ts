@@ -19,6 +19,13 @@ import type { ImportCreatedDto, ImportDetailDto, ImportPairDto } from './dto/imp
 
 const MAX_IMPORT_BYTES = 20 * 1024 * 1024; // 20 MB
 
+export const importTooLarge = (): AppException =>
+  new AppException({
+    code: ErrorCode.PAYLOAD_TOO_LARGE,
+    message: 'O arquivo precisa ter no máximo 20 MB.',
+    status: HttpStatus.PAYLOAD_TOO_LARGE,
+  });
+
 const STATUS_PROGRESS: Record<ImportStatus, number> = {
   PENDING: 0,
   PROCESSING: 25,
@@ -36,10 +43,7 @@ export class ImportsService {
     private readonly queue: Queue<ImportsJobData, void, ImportsJobName>,
   ) {}
 
-  async create(
-    userId: string,
-    file: Express.Multer.File | undefined,
-  ): Promise<ImportCreatedDto> {
+  async create(userId: string, file: Express.Multer.File | undefined): Promise<ImportCreatedDto> {
     if (!file) {
       throw new AppException({
         code: ErrorCode.VALIDATION_ERROR,
@@ -47,13 +51,7 @@ export class ImportsService {
         status: HttpStatus.BAD_REQUEST,
       });
     }
-    if (file.size > MAX_IMPORT_BYTES) {
-      throw new AppException({
-        code: ErrorCode.PAYLOAD_TOO_LARGE,
-        message: 'O arquivo precisa ter no maximo 20 MB.',
-        status: HttpStatus.PAYLOAD_TOO_LARGE,
-      });
-    }
+    if (file.size > MAX_IMPORT_BYTES) throw importTooLarge();
 
     const mime = detectMimeByMagic(file.buffer);
     if (!mime) {
@@ -80,12 +78,16 @@ export class ImportsService {
       },
     });
 
-    await this.queue.add('extract', { importJobId: importId }, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 10_000 },
-      removeOnComplete: { age: 24 * 3600 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    });
+    await this.queue.add(
+      'extract',
+      { importJobId: importId },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 10_000 },
+        removeOnComplete: { age: 24 * 3600 },
+        removeOnFail: { age: 7 * 24 * 3600 },
+      },
+    );
 
     return { id: job.id, status: job.status };
   }
@@ -94,8 +96,8 @@ export class ImportsService {
     const job = await this.prisma.importJob.findFirst({ where: { id: importId, userId } });
     if (!job) {
       throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Importacao nao encontrada.',
+        code: ErrorCode.IMPORT_NOT_FOUND,
+        message: 'Importação não encontrada.',
         status: HttpStatus.NOT_FOUND,
       });
     }

@@ -22,9 +22,9 @@ export class ReportDeckDto {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   })
-  @IsString({ message: 'Detalhes invalidos.' })
+  @IsString({ message: 'Detalhes inválidos.' })
   @MaxLength(REPORT_DETAILS_MAX, {
-    message: `Use no maximo ${REPORT_DETAILS_MAX} caracteres.`,
+    message: `Use no máximo ${REPORT_DETAILS_MAX} caracteres.`,
   })
   details?: string | null;
 }

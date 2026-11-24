@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -22,7 +23,7 @@ export enum CardsFilter {
 export class ListCardsQueryDto {
   @ApiPropertyOptional({ enum: CardsFilter, default: CardsFilter.ALL })
   @IsOptional()
-  @IsEnum(CardsFilter, { message: 'Filtro invalido.' })
+  @IsEnum(CardsFilter, { message: 'Filtro inválido.' })
   status: CardsFilter = CardsFilter.ALL;
 
   @ApiPropertyOptional()
@@ -105,8 +106,7 @@ export class UpdateCardDto {
 }
 
 export class AppendImportDto {
-  @ApiProperty()
-  @IsString({ message: 'Importacao invalida.' })
-  @MaxLength(80)
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('4', { message: 'Importação inválida.' })
   importId!: string;
 }

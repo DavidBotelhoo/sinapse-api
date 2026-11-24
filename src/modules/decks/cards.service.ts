@@ -2,15 +2,46 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-code';
 import { PrismaService } from '../../prisma/prisma.service';
-import { encodeCursor, decodeCursor } from '../../common/pagination/cursor';
+import {
+  decodeCursor,
+  encodeCursor,
+  invalidCursorError,
+  isUuid,
+} from '../../common/pagination/cursor';
 import { CardStatusService } from './card-status.service';
 import { accessibleDeckWhere } from './deck-access';
 import { CardsFilter, type ListCardsQueryDto } from './dto/cards.dto';
-import type { CardItemDto, CardListResponseDto, CreateCardDto, UpdateCardDto } from './dto/cards.dto';
+import type {
+  CardItemDto,
+  CardListResponseDto,
+  CreateCardDto,
+  UpdateCardDto,
+} from './dto/cards.dto';
 
-function padPosition(pos: number): string {
+export function padPosition(pos: number): string {
   return pos.toString(36).padStart(8, '0');
 }
+
+// Cursor da lista de cards: { id, k = posicao em base 36 }. Null se foi adulterado.
+export function decodeCardCursor(raw: string): { id: string; position: number } | null {
+  const cursor = decodeCursor(raw);
+  if (!cursor || !isUuid(cursor.id) || !/^[0-9a-z]{1,8}$/.test(cursor.k)) return null;
+  return { id: cursor.id, position: parseInt(cursor.k, 36) };
+}
+
+const deckNotFound = (): AppException =>
+  new AppException({
+    code: ErrorCode.DECK_NOT_FOUND,
+    message: 'Deck não encontrado.',
+    status: HttpStatus.NOT_FOUND,
+  });
+
+const cardNotFound = (): AppException =>
+  new AppException({
+    code: ErrorCode.CARD_NOT_FOUND,
+    message: 'Card não encontrado.',
+    status: HttpStatus.NOT_FOUND,
+  });
 
 @Injectable()
 export class CardsService {
@@ -35,22 +66,18 @@ export class CardsService {
       ];
     }
 
-    const cardIdsByStatus = await this.filterIdsByStatus(
-      userId,
-      deckId,
-      timezone,
-      query.status,
-    );
+    const cardIdsByStatus = await this.filterIdsByStatus(userId, deckId, timezone, query.status);
     if (query.status !== CardsFilter.ALL) {
       base.id = { in: cardIdsByStatus };
     }
 
-    const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+    const cursor = query.cursor ? decodeCardCursor(query.cursor) : null;
+    if (query.cursor && !cursor) throw invalidCursorError();
     const cursorWhere = cursor
       ? {
           OR: [
-            { position: { gt: this.decodePosition(cursor.k) } },
-            { position: this.decodePosition(cursor.k), id: { gt: cursor.id } },
+            { position: { gt: cursor.position } },
+            { position: cursor.position, id: { gt: cursor.id } },
           ],
         }
       : {};
@@ -134,17 +161,18 @@ export class CardsService {
     };
   }
 
-  async update(userId: string, cardId: string, dto: UpdateCardDto): Promise<CardItemDto> {
+  async update(
+    userId: string,
+    timezone: string,
+    cardId: string,
+    dto: UpdateCardDto,
+  ): Promise<CardItemDto> {
     const card = await this.prisma.card.findFirst({
       where: { id: cardId, deletedAt: null },
       include: { deck: { select: { ownerId: true, deletedAt: true } } },
     });
     if (!card || card.deck.deletedAt || card.deck.ownerId !== userId) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Card nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw cardNotFound();
     }
 
     const now = new Date();
@@ -165,13 +193,17 @@ export class CardsService {
       return u;
     });
 
+    // Editar o texto nao muda a revisao: devolve a situacao atual do card para o usuario.
+    const statuses = await this.cardStatus.cardStatusesFor(userId, [updated.id], timezone);
+    const status = statuses.get(updated.id) ?? { status: 'NEW' as const, dueInDays: null };
+
     return {
       id: updated.id,
       position: updated.position,
       question: updated.question,
       answer: updated.answer,
-      status: 'NEW',
-      dueInDays: null,
+      status: status.status,
+      dueInDays: status.dueInDays,
     };
   }
 
@@ -181,11 +213,7 @@ export class CardsService {
       include: { deck: { select: { ownerId: true, deletedAt: true } } },
     });
     if (!card || card.deck.deletedAt || card.deck.ownerId !== userId) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Card nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw cardNotFound();
     }
 
     const now = new Date();
@@ -200,23 +228,12 @@ export class CardsService {
 
   // ---------- helpers ----------
 
-  private decodePosition(k: string): number {
-    const n = parseInt(k, 36);
-    return Number.isFinite(n) ? n : 0;
-  }
-
   private async assertVisibleDeck(userId: string, deckId: string): Promise<void> {
     const deck = await this.prisma.deck.findFirst({
       where: { id: deckId, ...accessibleDeckWhere(userId) },
       select: { id: true },
     });
-    if (!deck) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Deck nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
+    if (!deck) throw deckNotFound();
   }
 
   private async assertOwnedDeck(userId: string, deckId: string): Promise<void> {
@@ -224,13 +241,7 @@ export class CardsService {
       where: { id: deckId, ownerId: userId, deletedAt: null },
       select: { id: true },
     });
-    if (!deck) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Deck nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
+    if (!deck) throw deckNotFound();
   }
 
   private async filterIdsByStatus(

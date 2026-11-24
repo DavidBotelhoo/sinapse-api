@@ -31,7 +31,7 @@ export class DeckReportsService {
     if (!deck) {
       throw new AppException({
         code: ErrorCode.DECK_NOT_FOUND,
-        message: 'Deck nao encontrado.',
+        message: 'Deck não encontrado.',
         status: HttpStatus.NOT_FOUND,
       });
     }
