@@ -49,7 +49,7 @@ export class UsersService {
     if (!okCurrent) {
       throw new AppException({
         code: ErrorCode.CURRENT_PASSWORD_WRONG,
-        message: 'A senha atual nao confere.',
+        message: 'A senha atual não confere.',
         status: HttpStatus.BAD_REQUEST,
       });
     }

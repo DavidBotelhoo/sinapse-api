@@ -11,7 +11,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBody,
   ApiConsumes,
@@ -26,8 +26,9 @@ import type { Request } from 'express';
 import type { CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
+import { FileUpload } from '../../common/upload/file-upload.interceptor';
 import { REFRESH_COOKIE } from '../auth/cookies.util';
-import { AvatarService, MAX_AVATAR_BYTES } from './avatar.service';
+import { AvatarService, MAX_AVATAR_BYTES, avatarTooLarge } from './avatar.service';
 import { MeResponseDto } from './dto/me-response.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -75,12 +76,17 @@ export class UsersController {
   }
 
   @Post('avatar')
+  @Throttle({ short: { limit: 10, ttl: 60_000 } })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        file: { type: 'string', format: 'binary', description: 'JPG, PNG ou WebP, ate 5 MB.' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'JPG, PNG ou WebP, ate 5 MB e 40 megapixels.',
+        },
       },
       required: ['file'],
     },
@@ -90,11 +96,12 @@ export class UsersController {
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
   @ApiResponse({ status: HttpStatus.PAYLOAD_TOO_LARGE, type: ErrorResponseDto })
   @ApiResponse({ status: HttpStatus.UNSUPPORTED_MEDIA_TYPE, type: ErrorResponseDto })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: MAX_AVATAR_BYTES, files: 1 },
-    }),
-  )
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    type: ErrorResponseDto,
+    description: 'TOO_MANY_REQUESTS: ate 10 envios por minuto.',
+  })
+  @UseInterceptors(FileUpload('file', MAX_AVATAR_BYTES, avatarTooLarge))
   async uploadAvatar(
     @CurrentUser() user: CurrentUserInfo,
     @UploadedFile() file: Express.Multer.File,
