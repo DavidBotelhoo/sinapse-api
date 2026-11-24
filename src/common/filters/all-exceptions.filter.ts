@@ -27,16 +27,23 @@ const STATUS_TO_CODE: Record<number, string> = {
 };
 
 const STATUS_TO_MESSAGE: Record<number, string> = {
-  [HttpStatus.BAD_REQUEST]: 'Requisicao invalida.',
-  [HttpStatus.UNAUTHORIZED]: 'Nao autenticado.',
-  [HttpStatus.FORBIDDEN]: 'Sem permissao.',
-  [HttpStatus.NOT_FOUND]: 'Recurso nao encontrado.',
+  [HttpStatus.BAD_REQUEST]: 'Requisição inválida.',
+  [HttpStatus.UNAUTHORIZED]: 'Não autenticado.',
+  [HttpStatus.FORBIDDEN]: 'Sem permissão.',
+  [HttpStatus.NOT_FOUND]: 'Recurso não encontrado.',
   [HttpStatus.CONFLICT]: 'Conflito.',
-  [HttpStatus.PAYLOAD_TOO_LARGE]: 'Arquivo grande demais.',
-  [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: 'Tipo de arquivo nao suportado.',
-  [HttpStatus.TOO_MANY_REQUESTS]: 'Muitas requisicoes. Tente de novo em instantes.',
+  [HttpStatus.PAYLOAD_TOO_LARGE]: 'Conteúdo grande demais.',
+  [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: 'Tipo de arquivo não suportado.',
+  [HttpStatus.TOO_MANY_REQUESTS]: 'Muitas requisições. Tente de novo em instantes.',
 };
 
+const UNEXPECTED: ErrorBody = { code: ErrorCode.INTERNAL_ERROR, message: 'Erro inesperado.' };
+
+// Converte qualquer exceção no formato { error: { code, message, fields? } }.
+// - AppException (nossas regras) já vem nesse formato e passa como está.
+// - Exceções do próprio Nest e das bibliotecas (ParseUUIDPipe, multer, throttler, JSON
+//   malformado, rota inexistente) trazem mensagens em inglês: usamos a mensagem em
+//   português do status, pronta para o usuário.
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -46,7 +53,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = http.getResponse<Response>();
     const request = http.getRequest<Request>();
 
-    const { status, body } = this.mapException(exception);
+    const { status, body } = mapException(exception);
 
     if (status >= 500) {
       this.logger.error(
@@ -60,60 +67,38 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json({ error: body });
   }
+}
 
-  private mapException(exception: unknown): { status: number; body: ErrorBody } {
-    if (exception instanceof HttpException) {
-      const status = exception.getStatus();
-      const payload = exception.getResponse();
-      return { status, body: this.bodyFromHttpException(status, payload) };
-    }
-
-    return {
-      status: HttpStatus.INTERNAL_SERVER_ERROR,
-      body: { code: ErrorCode.INTERNAL_ERROR, message: 'Erro inesperado.' },
-    };
+export function mapException(exception: unknown): { status: number; body: ErrorBody } {
+  if (!(exception instanceof HttpException)) {
+    return { status: HttpStatus.INTERNAL_SERVER_ERROR, body: UNEXPECTED };
   }
+  const status = exception.getStatus();
+  return { status, body: bodyFromHttpException(status, exception.getResponse()) };
+}
 
-  private bodyFromHttpException(status: number, payload: string | object): ErrorBody {
-    const defaultCode = STATUS_TO_CODE[status] ?? ErrorCode.INTERNAL_ERROR;
-    const defaultMessage = STATUS_TO_MESSAGE[status] ?? 'Erro inesperado.';
+function bodyFromHttpException(status: number, payload: string | object): ErrorBody {
+  if (status >= 500) return UNEXPECTED;
 
-    if (typeof payload === 'string') {
-      return { code: defaultCode, message: payload };
-    }
-
-    const obj = payload as Record<string, unknown>;
-
-    // Payload ja no formato { error: { code, message, fields? } }
-    if (obj.error && typeof obj.error === 'object') {
-      const inner = obj.error as Record<string, unknown>;
-      return {
-        code: typeof inner.code === 'string' ? inner.code : defaultCode,
-        message: typeof inner.message === 'string' ? inner.message : defaultMessage,
-        ...(inner.fields && typeof inner.fields === 'object'
-          ? { fields: inner.fields as Record<string, string> }
-          : {}),
-      };
-    }
-
-    // Payload do ValidationPipe: message pode ser string[] (erros por campo).
-    if (Array.isArray(obj.message)) {
-      const fields: Record<string, string> = {};
-      for (const entry of obj.message as string[]) {
-        const [field, ...rest] = entry.split(/\s+/, 2);
-        if (field) {
-          fields[field] = rest.length > 0 ? entry : 'Valor invalido.';
-        }
+  // Payload de AppException: { error: { code, message, fields? } }
+  if (typeof payload === 'object' && 'error' in payload) {
+    const inner = payload.error;
+    if (inner && typeof inner === 'object') {
+      const err = inner as Record<string, unknown>;
+      if (typeof err.code === 'string' && typeof err.message === 'string') {
+        return {
+          code: err.code,
+          message: err.message,
+          ...(err.fields && typeof err.fields === 'object'
+            ? { fields: err.fields as Record<string, string> }
+            : {}),
+        };
       }
-      return {
-        code: ErrorCode.VALIDATION_ERROR,
-        message: 'Dados invalidos.',
-        fields,
-      };
     }
-
-    const message = typeof obj.message === 'string' ? obj.message : defaultMessage;
-    const code = typeof obj.code === 'string' ? obj.code : defaultCode;
-    return { code, message };
   }
+
+  return {
+    code: STATUS_TO_CODE[status] ?? ErrorCode.BAD_REQUEST,
+    message: STATUS_TO_MESSAGE[status] ?? STATUS_TO_MESSAGE[HttpStatus.BAD_REQUEST]!,
+  };
 }

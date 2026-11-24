@@ -41,7 +41,7 @@ export class CsrfGuard implements CanActivate {
 
     throw new AppException({
       code: ErrorCode.CSRF_FORBIDDEN,
-      message: 'Origem nao autorizada.',
+      message: 'Origem não autorizada.',
       status: HttpStatus.FORBIDDEN,
     });
   }

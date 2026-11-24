@@ -30,7 +30,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) {
       throw new AppException({
         code: ErrorCode.UNAUTHORIZED,
-        message: 'Nao autenticado.',
+        message: 'Não autenticado.',
         status: HttpStatus.UNAUTHORIZED,
       });
     }
