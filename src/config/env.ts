@@ -33,12 +33,15 @@ const envSchema = z.object({
   WEB_URL: z.string().url().default('http://localhost:3000'),
   COOKIE_DOMAIN: z.string().min(1).default('localhost'),
 
+  // Quantos proxies confiaveis ficam na frente da API (load balancer, CDN). 0 = nenhum: o IP
+  // do cliente e o da conexao. Com 1, vem do X-Forwarded-For. Nao ligue sem proxy na frente:
+  // qualquer um poderia mandar o cabecalho e escapar dos limites de requisicao.
+  TRUST_PROXY: envInt(z.number().int().min(0).max(10), 0),
+
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 
-  JWT_ACCESS_SECRET: z
-    .string()
-    .min(32, 'JWT_ACCESS_SECRET precisa de pelo menos 32 caracteres'),
+  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET precisa de pelo menos 32 caracteres'),
 
   STORAGE_ENDPOINT: emptyToUndefined(z.string().url()),
   STORAGE_BUCKET: emptyToUndefined(z.string()),

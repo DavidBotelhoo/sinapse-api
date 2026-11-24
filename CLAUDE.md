@@ -80,6 +80,7 @@ NODE_ENV=development
 PORT=3333
 WEB_URL=http://localhost:3000
 COOKIE_DOMAIN=localhost
+TRUST_PROXY=0                                              # proxies confiáveis na frente da API (0 = nenhum)
 DATABASE_URL=postgresql://sinapse:sinapse@localhost:5432/sinapse
 REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET=
