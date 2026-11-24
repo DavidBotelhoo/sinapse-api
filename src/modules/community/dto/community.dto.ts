@@ -27,16 +27,16 @@ export class CommunityDecksQueryDto {
   @ApiPropertyOptional({ type: [Number], example: [1, 2] })
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true, message: 'Ano invalido.' })
-  @Min(1, { each: true, message: 'Ano invalido.' })
-  @Max(12, { each: true, message: 'Ano invalido.' })
+  @IsInt({ each: true, message: 'Ano inválido.' })
+  @Min(1, { each: true, message: 'Ano inválido.' })
+  @Max(12, { each: true, message: 'Ano inválido.' })
   @Transform(toIntArray)
   year?: number[];
 
   @ApiPropertyOptional({ type: [String], format: 'uuid' })
   @IsOptional()
   @IsArray()
-  @IsUUID('4', { each: true, message: 'Materia invalida.' })
+  @IsUUID('4', { each: true, message: 'Matéria inválida.' })
   @Transform(toStringArray)
   subjectIds?: string[];
 
@@ -46,7 +46,7 @@ export class CommunityDecksQueryDto {
   })
   @IsOptional()
   @IsString()
-  @MaxLength(80, { message: 'Use no maximo 80 caracteres.' })
+  @MaxLength(80, { message: 'Use no máximo 80 caracteres.' })
   @Transform(trimString)
   q?: string;
 
@@ -57,7 +57,7 @@ export class CommunityDecksQueryDto {
     description: 'popular: mais salvos primeiro. recent: conteudo atualizado mais recentemente.',
   })
   @IsOptional()
-  @IsEnum(CommunitySort, { message: 'Ordem invalida.' })
+  @IsEnum(CommunitySort, { message: 'Ordem inválida.' })
   sort: CommunitySort = CommunitySort.POPULAR;
 
   @ApiPropertyOptional({ description: 'nextCursor da pagina anterior, com a mesma ordem.' })
@@ -68,9 +68,9 @@ export class CommunityDecksQueryDto {
 
   @ApiPropertyOptional({ default: COMMUNITY_PAGE_DEFAULT, minimum: 1, maximum: COMMUNITY_PAGE_MAX })
   @IsOptional()
-  @IsInt({ message: 'Limite invalido.' })
-  @Min(1, { message: 'Limite invalido.' })
-  @Max(COMMUNITY_PAGE_MAX, { message: 'Limite invalido.' })
+  @IsInt({ message: 'Limite inválido.' })
+  @Min(1, { message: 'Limite inválido.' })
+  @Max(COMMUNITY_PAGE_MAX, { message: 'Limite inválido.' })
   limit: number = COMMUNITY_PAGE_DEFAULT;
 }
 

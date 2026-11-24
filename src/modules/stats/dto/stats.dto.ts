@@ -67,9 +67,9 @@ export class AgendaQueryDto {
     description: 'Quantos dias, a partir de hoje.',
   })
   @IsOptional()
-  @IsInt({ message: 'Quantidade de dias invalida.' })
-  @Min(1, { message: 'Quantidade de dias invalida.' })
-  @Max(30, { message: 'Use no maximo 30 dias.' })
+  @IsInt({ message: 'Quantidade de dias inválida.' })
+  @Min(1, { message: 'Quantidade de dias inválida.' })
+  @Max(30, { message: 'Use no máximo 30 dias.' })
   @Transform(({ value }: { value: unknown }) => {
     const n = Number(value);
     return Number.isFinite(n) ? Math.trunc(n) : value;
@@ -82,7 +82,7 @@ export class AgendaQueryDto {
     description: 'Dia escolhido (fuso do usuario), dentro da janela. Padrao: hoje.',
   })
   @IsOptional()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Data invalida. Use AAAA-MM-DD.' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Data inválida. Use AAAA-MM-DD.' })
   date?: string;
 }
 

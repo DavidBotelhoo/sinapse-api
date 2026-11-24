@@ -84,7 +84,7 @@ export class BillingWebhookService {
         this.logger.warn(err.message);
         throw new AppException({
           code: ErrorCode.INVALID_WEBHOOK_SIGNATURE,
-          message: 'Assinatura do webhook invalida.',
+          message: 'Assinatura do webhook inválida.',
           status: HttpStatus.BAD_REQUEST,
         });
       }

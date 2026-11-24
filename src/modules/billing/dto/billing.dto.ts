@@ -110,9 +110,9 @@ export class InvoicesQueryDto {
 
   @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 50 })
   @IsOptional()
-  @IsInt({ message: 'Limite invalido.' })
-  @Min(1, { message: 'Limite invalido.' })
-  @Max(50, { message: 'Limite invalido.' })
+  @IsInt({ message: 'Limite inválido.' })
+  @Min(1, { message: 'Limite inválido.' })
+  @Max(50, { message: 'Limite inválido.' })
   limit: number = 20;
 }
 

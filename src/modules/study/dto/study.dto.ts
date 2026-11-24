@@ -98,16 +98,16 @@ export const SESSION_LIMITS = [10, 20, 30] as const;
 export class CreateStudySessionDto {
   @ApiPropertyOptional({ type: [String], description: 'Decks escolhidos (proprios ou salvos).' })
   @IsOptional()
-  @IsArray({ message: 'Decks invalidos.' })
+  @IsArray({ message: 'Decks inválidos.' })
   @ArrayMaxSize(200, { message: 'Decks demais.' })
-  @IsUUID('4', { each: true, message: 'Deck invalido.' })
+  @IsUUID('4', { each: true, message: 'Deck inválido.' })
   deckIds?: string[];
 
   @ApiPropertyOptional({ type: [String], description: 'Materias escolhidas.' })
   @IsOptional()
-  @IsArray({ message: 'Materias invalidas.' })
-  @ArrayMaxSize(200, { message: 'Materias demais.' })
-  @IsUUID('4', { each: true, message: 'Materia invalida.' })
+  @IsArray({ message: 'Matérias inválidas.' })
+  @ArrayMaxSize(200, { message: 'Matérias demais.' })
+  @IsUUID('4', { each: true, message: 'Matéria inválida.' })
   subjectIds?: string[];
 
   @ApiPropertyOptional({
@@ -122,7 +122,7 @@ export class CreateStudySessionDto {
 
   @ApiPropertyOptional({ enum: StudyOrder, default: StudyOrder.DUE_FIRST })
   @IsOptional()
-  @IsEnum(StudyOrder, { message: 'Ordem invalida.' })
+  @IsEnum(StudyOrder, { message: 'Ordem inválida.' })
   order?: StudyOrder;
 
   @ApiPropertyOptional({
@@ -131,7 +131,7 @@ export class CreateStudySessionDto {
       '"today" = Revisao de hoje: so os que vencem hoje e os atrasados, de todos os decks.',
   })
   @IsOptional()
-  @IsEnum(StudyMode, { message: 'Modo invalido.' })
+  @IsEnum(StudyMode, { message: 'Modo inválido.' })
   mode?: StudyMode;
 }
 
@@ -189,11 +189,11 @@ export class StudySessionDto {
 
 export class CreateReviewDto {
   @ApiProperty()
-  @IsUUID('4', { message: 'Card invalido.' })
+  @IsUUID('4', { message: 'Card inválido.' })
   cardId!: string;
 
   @ApiProperty({ enum: ReviewRating, description: 'Errei = AGAIN, Dificil = HARD, Facil = GOOD.' })
-  @IsEnum(ReviewRating, { message: 'Avaliacao invalida.' })
+  @IsEnum(ReviewRating, { message: 'Avaliação inválida.' })
   rating!: ReviewRating;
 
   @ApiProperty({
@@ -201,8 +201,8 @@ export class CreateReviewDto {
     minimum: 0,
     description: 'Tempo entre mostrar a pergunta e avaliar. Acima de 5 min conta como 5 min.',
   })
-  @IsInt({ message: 'Tempo invalido.' })
-  @Min(0, { message: 'Tempo invalido.' })
+  @IsInt({ message: 'Tempo inválido.' })
+  @Min(0, { message: 'Tempo inválido.' })
   durationMs!: number;
 }
 
