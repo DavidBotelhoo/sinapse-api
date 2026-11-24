@@ -28,7 +28,7 @@ export class RequiresActiveSubscriptionGuard implements CanActivate {
     if (!userId) {
       throw new AppException({
         code: ErrorCode.UNAUTHORIZED,
-        message: 'Nao autenticado.',
+        message: 'Não autenticado.',
         status: HttpStatus.UNAUTHORIZED,
       });
     }

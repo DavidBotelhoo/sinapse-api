@@ -1,3 +1,7 @@
+import { HttpStatus } from '@nestjs/common';
+import { AppException } from '../errors/app.exception';
+import { ErrorCode } from '../errors/error-code';
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;
@@ -30,4 +34,29 @@ export function decodeCursor(raw: string): CursorPayload | null {
   } catch {
     return null;
   }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+// Cursor de listas ordenadas por data (createdAt desc, id desc). Devolve null se o cursor foi
+// adulterado: id que nao e UUID ou data invalida iriam ao banco e virariam erro 500.
+export function decodeDateCursor(raw: string): { id: string; date: Date } | null {
+  const cursor = decodeCursor(raw);
+  if (!cursor || !isUuid(cursor.id)) return null;
+  const date = new Date(cursor.k);
+  if (Number.isNaN(date.getTime()) || date.toISOString() !== cursor.k) return null;
+  return { id: cursor.id, date };
+}
+
+export function invalidCursorError(): AppException {
+  return new AppException({
+    code: ErrorCode.VALIDATION_ERROR,
+    message: 'Dados inválidos.',
+    status: HttpStatus.BAD_REQUEST,
+    fields: { cursor: 'Cursor inválido. Recarregue a lista.' },
+  });
 }

@@ -1,8 +1,10 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-code';
 import { PrismaService } from '../../prisma/prisma.service';
-import { encodeCursor, decodeCursor } from '../../common/pagination/cursor';
+import { decodeDateCursor, encodeCursor, invalidCursorError } from '../../common/pagination/cursor';
+import { loadUserTimezone } from '../../common/time/user-timezone';
+import type { Prisma } from '../../generated/prisma/client';
 import { ImportStatus } from '../../generated/prisma/enums';
 import { resolveUserCourseId } from '../catalog/user-course';
 import { StorageService } from '../storage/storage.service';
@@ -51,8 +53,29 @@ const DECK_SELECT = {
   owner: { select: PUBLIC_OWNER_SELECT },
 } as const;
 
+const importAlreadyUsed = (): AppException =>
+  new AppException({
+    code: ErrorCode.IMPORT_ALREADY_USED,
+    message: 'Esse arquivo já virou cards. Envie de novo para importar outra vez.',
+    status: HttpStatus.CONFLICT,
+  });
+
+const deckNotFound = (): AppException =>
+  new AppException({
+    code: ErrorCode.DECK_NOT_FOUND,
+    message: 'Deck não encontrado.',
+    status: HttpStatus.NOT_FOUND,
+  });
+
+interface ImportPair {
+  question: string;
+  answer: string | null;
+}
+
 @Injectable()
 export class DecksService {
+  private readonly logger = new Logger(DecksService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cardStatus: CardStatusService,
@@ -67,12 +90,13 @@ export class DecksService {
     const baseFilters = this.commonFilters(query);
     const scopedWhere = this.buildWhere(userId, query.scope, baseFilters);
 
-    const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+    const cursor = query.cursor ? decodeDateCursor(query.cursor) : null;
+    if (query.cursor && !cursor) throw invalidCursorError();
     const cursorWhere = cursor
       ? {
           OR: [
-            { createdAt: { lt: new Date(cursor.k) } },
-            { createdAt: new Date(cursor.k), id: { lt: cursor.id } },
+            { createdAt: { lt: cursor.date } },
+            { createdAt: cursor.date, id: { lt: cursor.id } },
           ],
         }
       : {};
@@ -114,9 +138,10 @@ export class DecksService {
   }
 
   async recent(userId: string, timezone: string, limit: number): Promise<DeckListItemDto[]> {
+    // So decks que o usuario ainda tem: um deck tirado dos salvos sai dos recentes.
     const groups = await this.prisma.reviewLog.groupBy({
       by: ['deckId'],
-      where: { userId, deck: { deletedAt: null } },
+      where: { userId, deck: accessibleDeckWhere(userId) },
       _max: { reviewedAt: true },
       orderBy: { _max: { reviewedAt: 'desc' } },
       take: limit,
@@ -163,21 +188,7 @@ export class DecksService {
   }
 
   async create(userId: string, dto: CreateDeckDto): Promise<DeckDetailDto> {
-    const importJob = await this.prisma.importJob.findUnique({ where: { id: dto.importId } });
-    if (!importJob || importJob.userId !== userId) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Importacao nao encontrada.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
-    if (importJob.status !== ImportStatus.READY) {
-      throw new AppException({
-        code: ErrorCode.BAD_REQUEST,
-        message: 'A importacao ainda nao esta pronta.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
+    const importJob = await this.loadReadyImport(userId, dto.importId);
 
     await this.assertCourseSubjects(userId, dto.subjectIds);
     const pairs = this.pairsFromImport(importJob.pairs);
@@ -186,6 +197,7 @@ export class DecksService {
     const now = new Date();
 
     const deck = await this.prisma.$transaction(async (tx) => {
+      await this.consumeImport(tx, importJob.id);
       const created = await tx.deck.create({
         data: {
           ownerId: userId,
@@ -208,14 +220,12 @@ export class DecksService {
         },
         select: DECK_SELECT,
       });
-      await tx.importJob.update({
-        where: { id: dto.importId },
-        data: { status: ImportStatus.CONSUMED },
-      });
       return created;
     });
 
-    return this.detailFor(userId, 'America/Sao_Paulo', deck);
+    await this.discardImportFile(importJob.fileKey);
+    const timezone = await loadUserTimezone(this.prisma, userId);
+    return this.detailFor(userId, timezone, deck);
   }
 
   async findDetail(userId: string, timezone: string, deckId: string): Promise<DeckDetailDto> {
@@ -244,7 +254,8 @@ export class DecksService {
       return tx.deck.update({ where: { id: deck.id }, data, select: DECK_SELECT });
     });
 
-    return this.detailFor(userId, 'America/Sao_Paulo', updated);
+    const timezone = await loadUserTimezone(this.prisma, userId);
+    return this.detailFor(userId, timezone, updated);
   }
 
   async delete(userId: string, deckId: string): Promise<void> {
@@ -257,21 +268,7 @@ export class DecksService {
 
   async appendImport(userId: string, deckId: string, importId: string): Promise<DeckDetailDto> {
     const deck = await this.loadOwnedDeck(userId, deckId);
-    const importJob = await this.prisma.importJob.findUnique({ where: { id: importId } });
-    if (!importJob || importJob.userId !== userId) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Importacao nao encontrada.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
-    if (importJob.status !== ImportStatus.READY) {
-      throw new AppException({
-        code: ErrorCode.BAD_REQUEST,
-        message: 'A importacao ainda nao esta pronta.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
+    const importJob = await this.loadReadyImport(userId, importId);
 
     const pairs = this.pairsFromImport(importJob.pairs);
     if (pairs.length === 0) {
@@ -284,6 +281,7 @@ export class DecksService {
 
     const now = new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
+      await this.consumeImport(tx, importJob.id);
       const last = await tx.card.findFirst({
         where: { deckId: deck.id, deletedAt: null },
         orderBy: { position: 'desc' },
@@ -300,11 +298,6 @@ export class DecksService {
         })),
       });
 
-      await tx.importJob.update({
-        where: { id: importId },
-        data: { status: ImportStatus.CONSUMED },
-      });
-
       return tx.deck.update({
         where: { id: deck.id },
         data: {
@@ -315,11 +308,9 @@ export class DecksService {
       });
     });
 
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { timezone: true },
-    });
-    return this.detailFor(userId, user.timezone, updated);
+    await this.discardImportFile(importJob.fileKey);
+    const timezone = await loadUserTimezone(this.prisma, userId);
+    return this.detailFor(userId, timezone, updated);
   }
 
   async addFavorite(userId: string, deckId: string): Promise<void> {
@@ -345,13 +336,7 @@ export class DecksService {
         ownerId: { not: userId },
       },
     });
-    if (!deck) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Deck nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
+    if (!deck) throw deckNotFound();
     await this.prisma.$transaction(async (tx) => {
       const result = await tx.deckSave.createMany({
         data: [{ userId, deckId }],
@@ -432,13 +417,7 @@ export class DecksService {
       where: { id: deckId, ...accessibleDeckWhere(userId) },
       select: DECK_SELECT,
     });
-    if (!deck) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Deck nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
+    if (!deck) throw deckNotFound();
     return deck;
   }
 
@@ -447,13 +426,7 @@ export class DecksService {
       where: { id: deckId, ownerId: userId, deletedAt: null },
       select: DECK_SELECT,
     });
-    if (!deck) {
-      throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Deck nao encontrado.',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
+    if (!deck) throw deckNotFound();
     return deck;
   }
 
@@ -465,7 +438,7 @@ export class DecksService {
     if (count !== subjectIds.length) {
       throw new AppException({
         code: ErrorCode.BAD_REQUEST,
-        message: 'Materia invalida para o curso.',
+        message: 'Matéria inválida para o curso.',
         status: HttpStatus.BAD_REQUEST,
       });
     }
@@ -475,9 +448,56 @@ export class DecksService {
     return resolveUserCourseId(this.prisma, userId);
   }
 
-  private pairsFromImport(raw: unknown): Array<{ question: string; answer: string | null }> {
+  // Importacao do usuario pronta para virar cards.
+  private async loadReadyImport(
+    userId: string,
+    importId: string,
+  ): Promise<{ id: string; fileKey: string; pairs: unknown }> {
+    const job = await this.prisma.importJob.findFirst({
+      where: { id: importId, userId },
+      select: { id: true, fileKey: true, pairs: true, status: true },
+    });
+    if (!job) {
+      throw new AppException({
+        code: ErrorCode.IMPORT_NOT_FOUND,
+        message: 'Importação não encontrada.',
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+    if (job.status === ImportStatus.CONSUMED) throw importAlreadyUsed();
+    if (job.status !== ImportStatus.READY) {
+      throw new AppException({
+        code: ErrorCode.IMPORT_NOT_READY,
+        message: 'A importação ainda não está pronta.',
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
+    return job;
+  }
+
+  // Marca a importacao como usada dentro da transacao que cria os cards. Com dois pedidos ao
+  // mesmo tempo, so um muda o status de READY; o outro desfaz a transacao (nada de deck duplo).
+  private async consumeImport(tx: Prisma.TransactionClient, importId: string): Promise<void> {
+    const consumed = await tx.importJob.updateMany({
+      where: { id: importId, status: ImportStatus.READY },
+      data: { status: ImportStatus.CONSUMED },
+    });
+    if (consumed.count === 0) throw importAlreadyUsed();
+  }
+
+  // Depois de virar cards, o arquivo enviado nao serve mais: apaga do storage. Falhar aqui
+  // nao desfaz o deck.
+  private async discardImportFile(fileKey: string): Promise<void> {
+    try {
+      await this.storage.deleteObject(fileKey);
+    } catch (err) {
+      this.logger.warn({ err, fileKey }, 'Nao foi possivel apagar o arquivo importado.');
+    }
+  }
+
+  private pairsFromImport(raw: unknown): ImportPair[] {
     if (!Array.isArray(raw)) return [];
-    const out: Array<{ question: string; answer: string | null }> = [];
+    const out: ImportPair[] = [];
     for (const item of raw) {
       if (item && typeof item === 'object') {
         const obj = item as { question?: unknown; answer?: unknown };

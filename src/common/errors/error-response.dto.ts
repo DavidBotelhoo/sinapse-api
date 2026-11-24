@@ -10,7 +10,7 @@ export class ErrorBodyDto {
   @ApiProperty({
     required: false,
     additionalProperties: { type: 'string' },
-    example: { email: 'Email invalido.' },
+    example: { email: 'Email inválido.' },
   })
   fields?: Record<string, string>;
 }

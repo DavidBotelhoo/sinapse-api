@@ -1,7 +1,8 @@
-import { Controller, Get, HttpStatus, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Param, Query } from '@nestjs/common';
 import { ApiCookieAuth, ApiOkResponse, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
+import { uuidParam } from '../../common/validation/params';
 import { CommunityService } from './community.service';
 import {
   CommunityDeckDetailDto,
@@ -33,13 +34,18 @@ export class CommunityController {
   @Get('decks/:id')
   @ApiOkResponse({ type: CommunityDeckDetailDto })
   @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR: id invalido.',
+  })
+  @ApiResponse({
     status: HttpStatus.NOT_FOUND,
     type: ErrorResponseDto,
     description: 'DECK_NOT_FOUND: deck privado, excluido ou ocultado pela moderacao.',
   })
   preview(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<CommunityDeckDetailDto> {
     return this.community.preview(user.id, deckId);
   }

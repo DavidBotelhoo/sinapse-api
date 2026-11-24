@@ -57,7 +57,7 @@ export class StatsService {
     if (dayIdx < 0) {
       throw new AppException({
         code: ErrorCode.VALIDATION_ERROR,
-        message: 'Dados invalidos.',
+        message: 'Dados inválidos.',
         status: HttpStatus.BAD_REQUEST,
         fields: { date: 'Escolha um dia dentro da agenda.' },
       });

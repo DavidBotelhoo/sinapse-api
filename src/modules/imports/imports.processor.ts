@@ -77,7 +77,7 @@ export class ImportsProcessor extends WorkerHost {
         where: { id: importJobId },
         data: {
           status: ImportStatus.FAILED,
-          error: 'Nao conseguimos ler esse arquivo. Tente outro PDF ou Word.',
+          error: 'Não conseguimos ler esse arquivo. Tente outro PDF ou Word.',
         },
       });
       throw err;

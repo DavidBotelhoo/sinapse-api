@@ -21,8 +21,8 @@ export class CatalogService {
 
     if (!course) {
       throw new AppException({
-        code: ErrorCode.NOT_FOUND,
-        message: 'Curso nao encontrado.',
+        code: ErrorCode.COURSE_NOT_FOUND,
+        message: 'Curso não encontrado.',
         status: HttpStatus.NOT_FOUND,
       });
     }

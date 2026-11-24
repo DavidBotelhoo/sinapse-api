@@ -21,27 +21,27 @@ export class UpdateDeckDto {
   @IsOptional()
   @IsString({ message: 'Informe um nome.' })
   @MinLength(1, { message: 'Informe um nome.' })
-  @MaxLength(120, { message: 'Use no maximo 120 caracteres.' })
+  @MaxLength(120, { message: 'Use no máximo 120 caracteres.' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   name?: string;
 
   @ApiPropertyOptional({ example: 3 })
   @IsOptional()
-  @IsInt({ message: 'Ano invalido.' })
+  @IsInt({ message: 'Ano inválido.' })
   @Min(1)
   @Max(12)
   year?: number;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
-  @IsArray({ message: 'Escolha ao menos uma materia.' })
-  @ArrayMinSize(1, { message: 'Escolha ao menos uma materia.' })
+  @IsArray({ message: 'Escolha ao menos uma matéria.' })
+  @ArrayMinSize(1, { message: 'Escolha ao menos uma matéria.' })
   @ArrayMaxSize(10)
-  @IsUUID('4', { each: true, message: 'Materia invalida.' })
+  @IsUUID('4', { each: true, message: 'Matéria inválida.' })
   subjectIds?: string[];
 
   @ApiPropertyOptional({ enum: DeckVisibility })
   @IsOptional()
-  @IsEnum(DeckVisibility, { message: 'Visibilidade invalida.' })
+  @IsEnum(DeckVisibility, { message: 'Visibilidade inválida.' })
   visibility?: DeckVisibility;
 }

@@ -72,9 +72,9 @@ export class CommunityService {
     if (query.cursor && !cursor) {
       throw new AppException({
         code: ErrorCode.VALIDATION_ERROR,
-        message: 'Dados invalidos.',
+        message: 'Dados inválidos.',
         status: HttpStatus.BAD_REQUEST,
-        fields: { cursor: 'Cursor invalido para esta ordem. Recarregue a lista.' },
+        fields: { cursor: 'Cursor inválido para esta ordem. Recarregue a lista.' },
       });
     }
 
@@ -115,7 +115,7 @@ export class CommunityService {
     if (!deck) {
       throw new AppException({
         code: ErrorCode.DECK_NOT_FOUND,
-        message: 'Deck nao encontrado.',
+        message: 'Deck não encontrado.',
         status: HttpStatus.NOT_FOUND,
       });
     }

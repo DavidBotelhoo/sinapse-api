@@ -6,7 +6,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -21,6 +20,8 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
+import { loadUserTimezone } from '../../common/time/user-timezone';
+import { uuidParam } from '../../common/validation/params';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CardsService } from './cards.service';
 import {
@@ -33,6 +34,12 @@ import {
 
 @ApiCookieAuth('sn_access')
 @ApiTags('cards')
+@ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
+@ApiResponse({
+  status: HttpStatus.BAD_REQUEST,
+  type: ErrorResponseDto,
+  description: 'VALIDATION_ERROR: id, filtro, cursor ou campos invalidos.',
+})
 @Controller()
 export class CardsController {
   constructor(
@@ -42,22 +49,30 @@ export class CardsController {
 
   @Get('decks/:id/cards')
   @ApiOkResponse({ type: CardListResponseDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'DECK_NOT_FOUND',
+  })
   async list(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
     @Query() query: ListCardsQueryDto,
   ): Promise<CardListResponseDto> {
-    const tz = await this.timezone(user.id);
+    const tz = await loadUserTimezone(this.prisma, user.id);
     return this.cards.list(user.id, tz, deckId, query);
   }
 
   @Post('decks/:id/cards')
   @ApiCreatedResponse({ type: CardItemDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'DECK_NOT_FOUND (so o dono adiciona cards)',
+  })
   async create(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
     @Body() dto: CreateCardDto,
   ): Promise<CardItemDto> {
     return this.cards.create(user.id, deckId, dto);
@@ -65,31 +80,32 @@ export class CardsController {
 
   @Patch('cards/:id')
   @ApiOkResponse({ type: CardItemDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'CARD_NOT_FOUND (so o dono edita)',
+  })
   async update(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) cardId: string,
+    @Param('id', uuidParam()) cardId: string,
     @Body() dto: UpdateCardDto,
   ): Promise<CardItemDto> {
-    return this.cards.update(user.id, cardId, dto);
+    const tz = await loadUserTimezone(this.prisma, user.id);
+    return this.cards.update(user.id, tz, cardId, dto);
   }
 
   @Delete('cards/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'CARD_NOT_FOUND (so o dono remove)',
+  })
   async delete(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) cardId: string,
+    @Param('id', uuidParam()) cardId: string,
   ): Promise<void> {
     await this.cards.delete(user.id, cardId);
-  }
-
-  private async timezone(userId: string): Promise<string> {
-    const u = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { timezone: true },
-    });
-    return u.timezone;
   }
 }

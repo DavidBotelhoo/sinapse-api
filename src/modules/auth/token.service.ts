@@ -63,7 +63,7 @@ export class TokenService {
     } catch {
       throw new AppException({
         code: ErrorCode.UNAUTHORIZED,
-        message: 'Nao autenticado.',
+        message: 'Não autenticado.',
         status: HttpStatus.UNAUTHORIZED,
       });
     }
@@ -165,7 +165,7 @@ export class TokenService {
   private invalidSession(): AppException {
     return new AppException({
       code: ErrorCode.SESSION_INVALID,
-      message: 'Sessao invalida ou expirada. Entre de novo.',
+      message: 'Sessão inválida ou expirada. Entre de novo.',
       status: HttpStatus.UNAUTHORIZED,
     });
   }

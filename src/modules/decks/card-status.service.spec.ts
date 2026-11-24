@@ -15,11 +15,7 @@ describe('CardStatusService.computeStatus', () => {
 
   it('state = NEW = NEW', () => {
     expect(
-      svc.computeStatus(
-        { state: CardLearningState.NEW, due: now, scheduledDays: 0 },
-        tz,
-        now,
-      ),
+      svc.computeStatus({ state: CardLearningState.NEW, due: now, scheduledDays: 0 }, tz, now),
     ).toEqual({ status: 'NEW', dueInDays: null });
   });
 
@@ -160,5 +156,49 @@ describe('CardStatusService.deckStatsFor', () => {
     const { svc, findMany } = serviceWith(1, []);
     await svc.deckStatsFor('u1', [deckId], tz, now);
     expect(findMany.mock.calls[0][0].where).toMatchObject({ card: { deletedAt: null } });
+  });
+
+  describe('dominio do deck = dominados / cards, arredondado', () => {
+    const future = new Date('2026-12-20T12:00:00Z');
+    const mastered = { state: CardLearningState.REVIEW, due: future, scheduledDays: 30 };
+
+    it.each([
+      [3, 1, 33], // 33,3% -> 33
+      [3, 2, 67], // 66,7% -> 67
+      [8, 1, 13], // 12,5% -> 13
+      [4, 4, 100],
+    ])('%i cards, %i dominados -> %i%%', async (cardCount, masteredCount, pct) => {
+      const { svc } = serviceWith(
+        cardCount,
+        Array.from({ length: masteredCount }, () => mastered),
+      );
+      const stats = (await svc.deckStatsFor('u1', [deckId], tz, now)).get(deckId)!;
+      expect(stats.masteredCount).toBe(masteredCount);
+      expect(stats.masteryPct).toBe(pct);
+    });
+
+    it('deck sem cards: 0%', async () => {
+      const { svc } = serviceWith(0, []);
+      const stats = (await svc.deckStatsFor('u1', [deckId], tz, now)).get(deckId)!;
+      expect(stats).toMatchObject({ cardCount: 0, newCount: 0, masteryPct: 0 });
+    });
+
+    it('so REVIEW com intervalo de 21 dias ou mais conta como dominado', async () => {
+      const { svc } = serviceWith(5, [
+        { state: CardLearningState.REVIEW, due: future, scheduledDays: 20 }, // agendado
+        { state: CardLearningState.REVIEW, due: future, scheduledDays: 21 }, // dominado
+        { state: CardLearningState.LEARNING, due: future, scheduledDays: 30 }, // aprendendo
+        { state: CardLearningState.RELEARNING, due: future, scheduledDays: 30 }, // reaprendendo
+      ]);
+      const stats = (await svc.deckStatsFor('u1', [deckId], tz, now)).get(deckId)!;
+      expect(stats).toMatchObject({
+        cardCount: 5,
+        newCount: 1,
+        dueToday: 0,
+        overdue: 0,
+        masteredCount: 1,
+        masteryPct: 20,
+      });
+    });
   });
 });

@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  ParseUUIDPipe,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import {
   ApiCookieAuth,
   ApiCreatedResponse,
@@ -19,6 +10,7 @@ import {
 import { RequiresActiveSubscription } from '../../common/auth/requires-active-subscription.guard';
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
+import { uuidParam } from '../../common/validation/params';
 import {
   CreateReviewDto,
   CreateStudySessionDto,
@@ -29,7 +21,7 @@ import {
 } from './dto/study.dto';
 import { StudyService } from './study.service';
 
-const sessionIdPipe = new ParseUUIDPipe({ version: '4' });
+const sessionIdPipe = uuidParam();
 
 @ApiTags('study')
 @ApiCookieAuth('sn_access')
@@ -74,6 +66,11 @@ export class StudyController {
   }
 
   @Get('sessions/:id')
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR: id invalido.',
+  })
   @ApiOperation({
     summary: 'Uma sessao com os cards, o que ja foi avaliado e se terminou (para retomar).',
   })
@@ -118,6 +115,11 @@ export class StudyController {
   }
 
   @Post('sessions/:id/finish')
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR: id invalido.',
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Encerra a sessao e devolve o resumo. Pode ser chamado de novo.' })
   @ApiOkResponse({ type: StudySessionSummaryDto })
@@ -134,6 +136,11 @@ export class StudyController {
   }
 
   @Post('sessions/:id/repeat')
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR: id invalido.',
+  })
   @RequiresActiveSubscription()
   @ApiOperation({ summary: '"Estudar novamente": nova sessao com os mesmos cards.' })
   @ApiCreatedResponse({ type: StudySessionDto })

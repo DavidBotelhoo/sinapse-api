@@ -90,9 +90,7 @@ describe('Auth flow (e2e)', () => {
     expect(clearedCookies.some((c) => c.startsWith('sn_refresh=;'))).toBe(true);
 
     // /me sem cookies -> 401
-    const meAfterLogout = await setCommonHeaders(
-      request(app.getHttpServer()).get('/v1/me'),
-    );
+    const meAfterLogout = await setCommonHeaders(request(app.getHttpServer()).get('/v1/me'));
     expect(meAfterLogout.status).toBe(401);
     expect(meAfterLogout.body).toMatchObject({ error: { code: 'UNAUTHORIZED' } });
   });
@@ -103,7 +101,7 @@ describe('Auth flow (e2e)', () => {
     );
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({
-      error: { code: 'INVALID_CREDENTIALS', message: 'Email ou senha nao conferem.' },
+      error: { code: 'INVALID_CREDENTIALS', message: 'Email ou senha não conferem.' },
     });
   });
 
@@ -145,20 +143,43 @@ describe('Auth flow (e2e)', () => {
     expect(res.body.error.fields).toMatchObject({
       firstName: expect.any(String),
       lastName: expect.any(String),
-      email: 'Email invalido.',
+      email: 'Email inválido.',
       password: 'Use pelo menos 8 caracteres.',
     });
   });
 
   it('forgot-password sempre responde 204, exista o email ou nao', async () => {
     const a = await setCommonHeaders(
-      request(app.getHttpServer()).post('/v1/auth/forgot-password').send({ email: 'nao-existe@x.com' }),
+      request(app.getHttpServer())
+        .post('/v1/auth/forgot-password')
+        .send({ email: 'nao-existe@x.com' }),
     );
     const b = await setCommonHeaders(
       request(app.getHttpServer()).post('/v1/auth/forgot-password').send({ email }),
     );
     expect(a.status).toBe(204);
     expect(b.status).toBe(204);
+  });
+
+  it('forgot-password: no maximo 3 pedidos por minuto, depois 429 em portugues', async () => {
+    // O teste anterior ja fez 2 pedidos neste minuto (mesmo IP, mesmo app).
+    const statuses: number[] = [];
+    let last: request.Response | undefined;
+    for (let i = 0; i < 3; i += 1) {
+      last = await setCommonHeaders(
+        request(app.getHttpServer())
+          .post('/v1/auth/forgot-password')
+          .send({ email: 'limite@x.com' }),
+      );
+      statuses.push(last.status);
+    }
+    expect(statuses).toEqual([204, 429, 429]);
+    expect(last!.body).toEqual({
+      error: {
+        code: 'TOO_MANY_REQUESTS',
+        message: 'Muitas requisições. Tente de novo em instantes.',
+      },
+    });
   });
 });
 

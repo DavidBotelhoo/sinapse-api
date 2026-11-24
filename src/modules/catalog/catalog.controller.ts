@@ -13,7 +13,11 @@ export class CatalogController {
   @Get(':slug')
   @Public()
   @ApiOkResponse({ type: CourseResponseDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'COURSE_NOT_FOUND',
+  })
   findBySlug(@Param('slug') slug: string): Promise<CourseResponseDto> {
     return this.catalog.findCourseBySlug(slug);
   }

@@ -57,14 +57,14 @@ export class BillingService {
     const user = await this.loadUser(userId);
     const access = subscriptionAccess(user.role, user.subscription, new Date());
     if (access.lifetime) {
-      throw alreadyActive('Sua conta tem acesso vitalicio. Nao precisa assinar.');
+      throw alreadyActive('Sua conta tem acesso vitalício. Não precisa assinar.');
     }
     const samePlan = user.subscription?.plan === plan;
     if (samePlan && access.status === SubscriptionStatus.ACTIVE) {
-      throw alreadyActive('Voce ja assina este plano.');
+      throw alreadyActive('Você já assina este plano.');
     }
     if (samePlan && access.status === SubscriptionStatus.PAST_DUE) {
-      throw alreadyActive('Voce ja assina este plano. Atualize o cartao em Gerenciar assinatura.');
+      throw alreadyActive('Você já assina este plano. Atualize o cartão em Gerenciar assinatura.');
     }
 
     return this.provider.createCheckout({
@@ -85,7 +85,7 @@ export class BillingService {
     if (!customerId) {
       throw new AppException({
         code: ErrorCode.NO_PAID_SUBSCRIPTION,
-        message: 'Voce ainda nao tem uma assinatura paga para gerenciar.',
+        message: 'Você ainda não tem uma assinatura paga para gerenciar.',
         status: HttpStatus.CONFLICT,
       });
     }
@@ -101,9 +101,9 @@ export class BillingService {
     ) {
       throw new AppException({
         code: ErrorCode.VALIDATION_ERROR,
-        message: 'Dados invalidos.',
+        message: 'Dados inválidos.',
         status: HttpStatus.BAD_REQUEST,
-        fields: { cursor: 'Cursor invalido. Recarregue a lista.' },
+        fields: { cursor: 'Cursor inválido. Recarregue a lista.' },
       });
     }
 

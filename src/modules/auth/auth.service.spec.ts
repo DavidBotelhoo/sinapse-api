@@ -15,7 +15,7 @@ function makeConfig(): ConfigService<Env, true> {
 }
 
 function makePrisma(user: Record<string, AnyFn> = {}, passwordReset: Record<string, AnyFn> = {}) {
-  return {
+  const prisma = {
     user: {
       findUnique: jest.fn(),
       create: jest.fn(),
@@ -29,12 +29,21 @@ function makePrisma(user: Record<string, AnyFn> = {}, passwordReset: Record<stri
       create: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       ...passwordReset,
     },
     authSession: {
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
-    $transaction: jest.fn((ops: Array<Promise<unknown>>) => Promise.all(ops)),
+  };
+  // Transacao interativa (callback) ou em lote (lista): o "tx" e o proprio mock.
+  return {
+    ...prisma,
+    $transaction: jest.fn((arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (tx: typeof prisma) => Promise<unknown>)(prisma)
+        : Promise.all(arg as Array<Promise<unknown>>),
+    ),
   };
 }
 
@@ -80,7 +89,9 @@ describe('AuthService', () => {
           { firstName: 'A', lastName: 'B', email: 'a@b.com', password: 'uma-senha-forte' },
           ctx,
         ),
-      ).rejects.toMatchObject({ response: { error: { code: ErrorCode.EMAIL_ALREADY_REGISTERED } } });
+      ).rejects.toMatchObject({
+        response: { error: { code: ErrorCode.EMAIL_ALREADY_REGISTERED } },
+      });
     });
 
     it('cria usuario, emite tokens e devolve MeResponseDto', async () => {
@@ -118,9 +129,11 @@ describe('AuthService', () => {
           }),
         }),
       );
-      const trialEndsAt = (prisma.user.create.mock.calls[0] as [
-        { data: { subscription: { create: { trialEndsAt: Date } } } },
-      ])[0].data.subscription.create.trialEndsAt;
+      const trialEndsAt = (
+        prisma.user.create.mock.calls[0] as [
+          { data: { subscription: { create: { trialEndsAt: Date } } } },
+        ]
+      )[0].data.subscription.create.trialEndsAt;
       const days = (trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
       expect(days).toBeGreaterThan(6.99);
       expect(days).toBeLessThanOrEqual(7);
@@ -130,11 +143,14 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('joga INVALID_CREDENTIALS se usuario nao existe', async () => {
+    it('joga INVALID_CREDENTIALS se usuario nao existe, conferindo uma senha mesmo assim', async () => {
       const prisma = makePrisma({ findUnique: jest.fn().mockResolvedValue(null) });
+      const passwords = new PasswordService();
+      // Mesmo trabalho de um login com senha errada: o tempo nao revela se o email tem conta.
+      const dummy = jest.spyOn(passwords, 'verifyAgainstNothing').mockResolvedValue(false);
       const svc = new AuthService(
         prisma as never,
-        new PasswordService(),
+        passwords,
         makeTokens() as never,
         makeUserMapper() as never,
         makeMail() as never,
@@ -143,6 +159,7 @@ describe('AuthService', () => {
       await expect(
         svc.login({ email: 'nao@existe.com', password: 'qualquer' }, ctx),
       ).rejects.toMatchObject({ response: { error: { code: ErrorCode.INVALID_CREDENTIALS } } });
+      expect(dummy).toHaveBeenCalledWith('qualquer');
     });
 
     it('joga INVALID_CREDENTIALS se senha nao bate', async () => {
@@ -160,9 +177,9 @@ describe('AuthService', () => {
         makeMail() as never,
         makeConfig(),
       );
-      await expect(
-        svc.login({ email: 'a@b.com', password: 'errada' }, ctx),
-      ).rejects.toMatchObject({ response: { error: { code: ErrorCode.INVALID_CREDENTIALS } } });
+      await expect(svc.login({ email: 'a@b.com', password: 'errada' }, ctx)).rejects.toMatchObject({
+        response: { error: { code: ErrorCode.INVALID_CREDENTIALS } },
+      });
     });
   });
 
@@ -197,22 +214,17 @@ describe('AuthService', () => {
       );
       await svc.forgotPassword({ email: 'a@b.com' });
       expect(prisma.passwordReset.create).toHaveBeenCalled();
-      expect(mail.enqueuePasswordReset).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: 'a@b.com',
-          firstName: 'Davi',
-          resetUrl: expect.stringContaining('/redefinir-senha?token='),
-        }),
-      );
+      // Sem o nome: o email nao leva nada digitado pelo usuario.
+      expect(mail.enqueuePasswordReset).toHaveBeenCalledWith({
+        to: 'a@b.com',
+        resetUrl: expect.stringContaining('/redefinir-senha?token='),
+      });
     });
   });
 
   describe('resetPassword', () => {
     it('joga INVALID_RESET_TOKEN quando token nao existe', async () => {
-      const prisma = makePrisma(
-        {},
-        { findUnique: jest.fn().mockResolvedValue(null) },
-      );
+      const prisma = makePrisma({}, { findUnique: jest.fn().mockResolvedValue(null) });
       const svc = new AuthService(
         prisma as never,
         new PasswordService(),
@@ -303,7 +315,44 @@ describe('AuthService', () => {
         makeConfig(),
       );
       await svc.resetPassword({ token: 'x', password: 'nova-senha-forte' });
-      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.passwordReset.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ id: 'r1', usedAt: null }) }),
+      );
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'u1' } }),
+      );
+      expect(prisma.authSession.updateMany).toHaveBeenCalled();
+    });
+
+    it('mesmo link usado duas vezes ao mesmo tempo: so o primeiro troca a senha', async () => {
+      const prisma = makePrisma(
+        {},
+        {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'r1',
+            userId: 'u1',
+            tokenHash: 'h',
+            usedAt: null,
+            expiresAt: new Date(Date.now() + 100000),
+          }),
+          // O outro pedido marcou o token entre a leitura e a transacao.
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+      );
+      const passwords = new PasswordService();
+      jest.spyOn(passwords, 'hash').mockResolvedValue('novo-hash');
+      const svc = new AuthService(
+        prisma as never,
+        passwords,
+        makeTokens() as never,
+        makeUserMapper() as never,
+        makeMail() as never,
+        makeConfig(),
+      );
+      await expect(
+        svc.resetPassword({ token: 'x', password: 'nova-senha-forte' }),
+      ).rejects.toMatchObject({ response: { error: { code: ErrorCode.INVALID_RESET_TOKEN } } });
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

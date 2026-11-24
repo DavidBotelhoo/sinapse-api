@@ -79,4 +79,42 @@ que bombeia sangue.`;
       },
     ]);
   });
+
+  describe('texto como sai de PDF e Word', () => {
+    it('quebra de linha do Windows (\\r\\n)', async () => {
+      const text = 'P: O que e IC?\r\nR: Insuficiencia cardiaca\r\nP: Dose?\r\nR: 10 mg\r\n';
+      expect(await extractor.extract(text)).toEqual([
+        { question: 'O que e IC?', answer: 'Insuficiencia cardiaca' },
+        { question: 'Dose?', answer: '10 mg' },
+      ]);
+    });
+
+    it('marcadores em minusculas (p:/r:)', async () => {
+      expect(await extractor.extract('p: o que e?\nr: isso\n')).toEqual([
+        { question: 'o que e?', answer: 'isso' },
+      ]);
+    });
+
+    it('mantem os acentos', async () => {
+      const text = 'Pergunta: Qual é a função do miocárdio?\nResposta: Bombear o sangue.';
+      expect(await extractor.extract(text)).toEqual([
+        { question: 'Qual é a função do miocárdio?', answer: 'Bombear o sangue.' },
+      ]);
+    });
+
+    it('numeracao com parentese: "1)"', async () => {
+      const text = '1) Qual o nervo do diafragma?\nFrenico\n2) Qual a maior veia?\nCava inferior';
+      expect(await extractor.extract(text)).toEqual([
+        { question: 'Qual o nervo do diafragma?', answer: 'Frenico' },
+        { question: 'Qual a maior veia?', answer: 'Cava inferior' },
+      ]);
+    });
+
+    it('espacos sobrando nas pontas', async () => {
+      const text = '   P:   Pergunta com espaco   \n   R:   resposta   \n';
+      expect(await extractor.extract(text)).toEqual([
+        { question: 'Pergunta com espaco', answer: 'resposta' },
+      ]);
+    });
+  });
 });

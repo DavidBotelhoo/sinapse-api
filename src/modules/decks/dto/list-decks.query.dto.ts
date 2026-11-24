@@ -23,13 +23,13 @@ export enum DeckScope {
 export class ListDecksQueryDto {
   @ApiPropertyOptional({ enum: DeckScope, default: DeckScope.ALL })
   @IsOptional()
-  @IsEnum(DeckScope, { message: 'Escopo invalido.' })
+  @IsEnum(DeckScope, { message: 'Escopo inválido.' })
   scope: DeckScope = DeckScope.ALL;
 
   @ApiPropertyOptional({ type: [Number], example: [1, 2] })
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true, message: 'Ano invalido.' })
+  @IsInt({ each: true, message: 'Ano inválido.' })
   @Min(1, { each: true })
   @Max(12, { each: true })
   @Transform(toIntArray)
@@ -38,7 +38,7 @@ export class ListDecksQueryDto {
   @ApiPropertyOptional({ type: [String], example: ['uuid'] })
   @IsOptional()
   @IsArray()
-  @IsUUID('4', { each: true, message: 'Materia invalida.' })
+  @IsUUID('4', { each: true, message: 'Matéria inválida.' })
   @Transform(toStringArray)
   subjectIds?: string[];
 

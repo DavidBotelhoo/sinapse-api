@@ -6,8 +6,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
-  ParseUUIDPipe,
   Patch,
   Post,
   Put,
@@ -24,6 +22,8 @@ import {
 import { RequiresActiveSubscription } from '../../common/auth/requires-active-subscription.guard';
 import { CurrentUser, type CurrentUserInfo } from '../../common/decorators/current-user.decorator';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
+import { loadUserTimezone } from '../../common/time/user-timezone';
+import { optionalIntQuery, uuidParam } from '../../common/validation/params';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DeckReportsService } from './deck-reports.service';
 import { DecksService } from './decks.service';
@@ -32,14 +32,20 @@ import { UpdateDeckDto } from './dto/update-deck.dto';
 import { ListDecksQueryDto } from './dto/list-decks.query.dto';
 import { AppendImportDto } from './dto/cards.dto';
 import { ReportDeckDto } from './dto/report-deck.dto';
-import {
-  DeckDetailDto,
-  DeckListItemDto,
-  DeckListResponseDto,
-} from './dto/common.dto';
+import { DeckDetailDto, DeckListItemDto, DeckListResponseDto } from './dto/common.dto';
+
+const BAD_ID = 'VALIDATION_ERROR: id invalido.';
+const DECK_404 =
+  'DECK_NOT_FOUND: deck que o usuario nao tem (ou de outra pessoa, se so o dono pode).';
+const IMPORT_ERRORS = {
+  notFound: 'IMPORT_NOT_FOUND (importacao de outra pessoa ou inexistente) ou DECK_NOT_FOUND.',
+  badRequest: 'VALIDATION_ERROR ou IMPORT_NOT_READY (o arquivo ainda esta sendo lido).',
+  conflict: 'IMPORT_ALREADY_USED: essa importacao ja virou cards.',
+};
 
 @ApiTags('decks')
 @ApiCookieAuth('sn_access')
+@ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
 @Controller('decks')
 export class DecksController {
   constructor(
@@ -50,22 +56,31 @@ export class DecksController {
 
   @Get()
   @ApiOkResponse({ type: DeckListResponseDto })
-  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR: filtro ou cursor invalido.',
+  })
   async list(
     @CurrentUser() user: CurrentUserInfo,
     @Query() query: ListDecksQueryDto,
   ): Promise<DeckListResponseDto> {
-    const timezone = await this.timezone(user.id);
+    const timezone = await loadUserTimezone(this.prisma, user.id);
     return this.decks.list(user.id, timezone, query);
   }
 
   @Get('recent')
   @ApiOkResponse({ type: DeckListItemDto, isArray: true })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: 'VALIDATION_ERROR: limit nao e numero.',
+  })
   async recent(
     @CurrentUser() user: CurrentUserInfo,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Query('limit', optionalIntQuery('limit')) limit?: number,
   ): Promise<DeckListItemDto[]> {
-    const tz = await this.timezone(user.id);
+    const tz = await loadUserTimezone(this.prisma, user.id);
     const clamped = Math.min(Math.max(limit ?? 4, 1), 20);
     return this.decks.recent(user.id, tz, clamped);
   }
@@ -73,8 +88,21 @@ export class DecksController {
   @Post()
   @RequiresActiveSubscription()
   @ApiCreatedResponse({ type: DeckDetailDto })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: IMPORT_ERRORS.badRequest,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'IMPORT_NOT_FOUND',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    type: ErrorResponseDto,
+    description: IMPORT_ERRORS.conflict,
+  })
   async create(
     @CurrentUser() user: CurrentUserInfo,
     @Body() dto: CreateDeckDto,
@@ -84,22 +112,23 @@ export class DecksController {
 
   @Get(':id')
   @ApiOkResponse({ type: DeckDetailDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto, description: BAD_ID })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto, description: DECK_404 })
   async detail(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<DeckDetailDto> {
-    const tz = await this.timezone(user.id);
+    const tz = await loadUserTimezone(this.prisma, user.id);
     return this.decks.findDetail(user.id, tz, deckId);
   }
 
   @Patch(':id')
   @ApiOkResponse({ type: DeckDetailDto })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto, description: DECK_404 })
   async update(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
     @Body() dto: UpdateDeckDto,
   ): Promise<DeckDetailDto> {
     return this.decks.update(user.id, deckId, dto);
@@ -108,9 +137,11 @@ export class DecksController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto, description: BAD_ID })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto, description: DECK_404 })
   async delete(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<void> {
     await this.decks.delete(user.id, deckId);
   }
@@ -118,11 +149,24 @@ export class DecksController {
   @Post(':id/imports')
   @RequiresActiveSubscription()
   @ApiOkResponse({ type: DeckDetailDto })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    type: ErrorResponseDto,
+    description: IMPORT_ERRORS.badRequest,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: IMPORT_ERRORS.notFound,
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    type: ErrorResponseDto,
+    description: IMPORT_ERRORS.conflict,
+  })
   async appendImport(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
     @Body() dto: AppendImportDto,
   ): Promise<DeckDetailDto> {
     return this.decks.appendImport(user.id, deckId, dto.importId);
@@ -131,19 +175,22 @@ export class DecksController {
   @Put(':id/favorite')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto, description: BAD_ID })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto, description: DECK_404 })
   async favorite(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<void> {
     await this.decks.addFavorite(user.id, deckId);
   }
 
   @Delete(':id/favorite')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiNoContentResponse()
+  @ApiNoContentResponse({ description: 'Sem favorito, responde igual.' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto, description: BAD_ID })
   async unfavorite(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<void> {
     await this.decks.removeFavorite(user.id, deckId);
   }
@@ -151,20 +198,26 @@ export class DecksController {
   @Put(':id/save')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, type: ErrorResponseDto })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto, description: BAD_ID })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    type: ErrorResponseDto,
+    description: 'DECK_NOT_FOUND: deck privado, excluido, ocultado ou do proprio usuario.',
+  })
   async save(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<void> {
     await this.decks.save(user.id, deckId);
   }
 
   @Delete(':id/save')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiNoContentResponse()
+  @ApiNoContentResponse({ description: 'Se nao estava salvo, responde igual.' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto, description: BAD_ID })
   async unsave(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
   ): Promise<void> {
     await this.decks.unsave(user.id, deckId);
   }
@@ -176,7 +229,6 @@ export class DecksController {
       'Denuncia registrada. Uma por usuario e deck: repetir troca o motivo e reabre a denuncia.',
   })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, type: ErrorResponseDto })
-  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, type: ErrorResponseDto })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
     type: ErrorResponseDto,
@@ -185,17 +237,9 @@ export class DecksController {
   })
   async report(
     @CurrentUser() user: CurrentUserInfo,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) deckId: string,
+    @Param('id', uuidParam()) deckId: string,
     @Body() dto: ReportDeckDto,
   ): Promise<void> {
     await this.reports.report(user.id, deckId, dto);
-  }
-
-  private async timezone(userId: string): Promise<string> {
-    const u = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { timezone: true },
-    });
-    return u.timezone;
   }
 }

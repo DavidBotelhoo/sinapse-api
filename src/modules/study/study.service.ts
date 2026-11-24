@@ -76,12 +76,12 @@ function notFound(code: string, message: string): AppException {
 }
 
 const sessionNotFound = (): AppException =>
-  notFound(ErrorCode.STUDY_SESSION_NOT_FOUND, 'Sessao de estudo nao encontrada.');
+  notFound(ErrorCode.STUDY_SESSION_NOT_FOUND, 'Sessão de estudo não encontrada.');
 
 const nothingToStudy = (): AppException =>
   new AppException({
     code: ErrorCode.NOTHING_TO_STUDY,
-    message: 'Nada para estudar agora nessa selecao. Os cards estao em dia.',
+    message: 'Nada para estudar agora nessa seleção. Os cards estão em dia.',
     status: HttpStatus.UNPROCESSABLE_ENTITY,
   });
 
@@ -200,11 +200,11 @@ export class StudyService {
 
     if (isToday && (deckIds.length > 0 || subjectIds.length > 0)) {
       throw this.validation({
-        mode: 'A revisao de hoje usa todos os decks; nao envie deckIds nem subjectIds.',
+        mode: 'A revisão de hoje usa todos os decks; não envie deckIds nem subjectIds.',
       });
     }
     if (!isToday && deckIds.length === 0 && subjectIds.length === 0) {
-      throw this.validation({ deckIds: 'Escolha ao menos um deck ou uma materia.' });
+      throw this.validation({ deckIds: 'Escolha ao menos um deck ou uma matéria.' });
     }
 
     const limit = dto.limit === undefined ? (isToday ? null : DEFAULT_LIMIT) : dto.limit;
@@ -264,7 +264,7 @@ export class StudyService {
         select: { id: true },
       });
       if (found.length !== deckIds.length) {
-        throw notFound(ErrorCode.DECK_NOT_FOUND, 'Deck nao encontrado.');
+        throw notFound(ErrorCode.DECK_NOT_FOUND, 'Deck não encontrado.');
       }
       deckIds.forEach((id, i) => rank.set(id, i));
     }
@@ -362,14 +362,14 @@ export class StudyService {
       if (session.finishedAt) {
         throw new AppException({
           code: ErrorCode.STUDY_SESSION_FINISHED,
-          message: 'Essa sessao ja foi encerrada.',
+          message: 'Essa sessão já foi encerrada.',
           status: HttpStatus.CONFLICT,
         });
       }
       if (!session.cardIds.includes(dto.cardId)) {
         throw new AppException({
           code: ErrorCode.CARD_NOT_IN_SESSION,
-          message: 'Esse card nao faz parte da sessao.',
+          message: 'Esse card não faz parte da sessão.',
           status: HttpStatus.BAD_REQUEST,
         });
       }
@@ -380,7 +380,7 @@ export class StudyService {
       if (already) {
         throw new AppException({
           code: ErrorCode.CARD_ALREADY_REVIEWED,
-          message: 'Esse card ja foi avaliado nesta sessao.',
+          message: 'Esse card já foi avaliado nesta sessão.',
           status: HttpStatus.CONFLICT,
         });
       }
@@ -390,7 +390,7 @@ export class StudyService {
         where: { id: dto.cardId, deletedAt: null, deck: accessibleDeckWhere(userId) },
         select: { id: true, deckId: true },
       });
-      if (!card) throw notFound(ErrorCode.CARD_NOT_FOUND, 'Card nao encontrado.');
+      if (!card) throw notFound(ErrorCode.CARD_NOT_FOUND, 'Card não encontrado.');
 
       const current = await tx.cardState.findUnique({
         where: { userId_cardId: { userId, cardId: card.id } },
@@ -677,7 +677,7 @@ export class StudyService {
   private validation(fields: Record<string, string>): AppException {
     return new AppException({
       code: ErrorCode.VALIDATION_ERROR,
-      message: 'Dados invalidos.',
+      message: 'Dados inválidos.',
       status: HttpStatus.BAD_REQUEST,
       fields,
     });
