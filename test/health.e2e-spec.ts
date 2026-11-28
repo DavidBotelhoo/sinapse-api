@@ -1,19 +1,20 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { configureApp, UPLOADS_DIR } from '../src/app.setup';
+import { configureApp } from '../src/app.setup';
 import { MailService } from '../src/modules/mail/mail.service';
+import { StorageService } from '../src/modules/storage/storage.service';
 
 // App inteiro, com os guards globais e a mesma configuracao HTTP do main.ts.
 describe('App: health, erros e arquivos publicos (e2e)', () => {
   let app: NestExpressApplication;
+  let storage: StorageService;
   const tag = `e2e-${Date.now().toString(36)}`;
-  const files = {
-    avatar: resolve(UPLOADS_DIR, 'avatars', `${tag}.webp`),
-    importFile: resolve(UPLOADS_DIR, 'imports', `${tag}.pdf`),
+  // Gravados pelo StorageService: o teste vale para o disco e para o bucket (STORAGE_DRIVER).
+  const keys = {
+    avatar: `avatars/${tag}.webp`,
+    importFile: `imports/${tag}.pdf`,
   };
 
   beforeAll(async () => {
@@ -26,15 +27,22 @@ describe('App: health, erros e arquivos publicos (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    await mkdir(resolve(UPLOADS_DIR, 'avatars'), { recursive: true });
-    await mkdir(resolve(UPLOADS_DIR, 'imports'), { recursive: true });
-    await writeFile(files.avatar, 'avatar');
-    await writeFile(files.importFile, '%PDF-1.7 privado');
+    storage = app.get(StorageService);
+    await storage.putObject({
+      key: keys.avatar,
+      body: Buffer.from('avatar'),
+      contentType: 'image/webp',
+    });
+    await storage.putObject({
+      key: keys.importFile,
+      body: Buffer.from('%PDF-1.7 privado'),
+      contentType: 'application/pdf',
+    });
   });
 
   afterAll(async () => {
-    await rm(files.avatar, { force: true });
-    await rm(files.importFile, { force: true });
+    await storage.deleteObject(keys.avatar);
+    await storage.deleteObject(keys.importFile);
     await app.close();
   });
 
@@ -66,9 +74,32 @@ describe('App: health, erros e arquivos publicos (e2e)', () => {
   it('fotos de perfil sao publicas; arquivos importados nao', async () => {
     const avatar = await request(app.getHttpServer()).get(`/uploads/avatars/${tag}.webp`);
     expect(avatar.status).toBe(200);
+    expect(avatar.headers['content-type']).toBe('image/webp');
+    expect(Buffer.from(avatar.body as Buffer).toString()).toBe('avatar');
+
+    // Mesma foto de novo: o navegador confere pelo ETag e recebe 304, sem o arquivo.
+    const again = await request(app.getHttpServer())
+      .get(`/uploads/avatars/${tag}.webp`)
+      .set('If-None-Match', avatar.headers['etag'] as string);
+    expect(again.status).toBe(304);
 
     const imported = await request(app.getHttpServer()).get(`/uploads/imports/${tag}.pdf`);
     expect(imported.status).toBe(404);
     expect(imported.text).not.toContain('privado');
+
+    // Nem saindo da pasta das fotos.
+    const escaped = await request(app.getHttpServer()).get(
+      `/uploads/avatars/..%2Fimports%2F${tag}.pdf`,
+    );
+    expect(escaped.status).toBe(404);
+    expect(escaped.text).not.toContain('privado');
+  });
+
+  it('foto que nao existe: 404 no formato padrao', async () => {
+    const res = await request(app.getHttpServer()).get('/uploads/avatars/nao-existe.webp');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({
+      error: { code: 'NOT_FOUND', message: 'Recurso não encontrado.' },
+    });
   });
 });

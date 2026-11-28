@@ -43,7 +43,7 @@ src/
     study/                visão de hoje, sessões (limite e ordem), reviews, FSRS
     stats/                /me/stats e /me/agenda
     billing/              BillingProvider, checkout, portal, webhook, histórico de cobranças
-    storage/              cliente S3/R2
+    storage/              StorageService: disco (local) ou bucket S3/R2 (s3)
     mail/                 MailProvider + processor da fila "mail"
   generated/prisma/       cliente gerado pelo Prisma (não editar)
 prisma/
@@ -84,7 +84,9 @@ TRUST_PROXY=0                                              # proxies confiáveis
 DATABASE_URL=postgresql://sinapse:sinapse@localhost:5432/sinapse
 REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET=
-STORAGE_ENDPOINT=  STORAGE_BUCKET=  STORAGE_ACCESS_KEY=  STORAGE_SECRET_KEY=  STORAGE_PUBLIC_URL=
+STORAGE_DRIVER=local                                       # local (uploads/, dev) ou s3 (S3, R2, MinIO; bucket privado)
+STORAGE_PUBLIC_URL=                                        # URL publica de /uploads da API; obrigatoria em producao
+STORAGE_BUCKET=  STORAGE_ENDPOINT=  STORAGE_REGION=auto  STORAGE_ACCESS_KEY=  STORAGE_SECRET_KEY=  STORAGE_FORCE_PATH_STYLE=false
 MAIL_FROM="Sinapse <nao-responda@sinapse.app>"   SMTP_URL=smtp://localhost:1025
 BILLING_PROVIDER=fake   BILLING_WEBHOOK_SECRET=            # segredo: obrigatório, mínimo 32 caracteres
 BILLING_PRICE_MONTHLY_CENTS=   BILLING_PRICE_YEARLY_CENTS=  # obrigatórios, em centavos (sem padrão no código)

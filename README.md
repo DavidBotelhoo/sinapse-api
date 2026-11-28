@@ -40,8 +40,13 @@ A API valida tudo na inicialização (`src/config/env.ts`) e não sobe se faltar
 | `DATABASE_URL` | obrigatória | Postgres |
 | `REDIS_URL` | obrigatória | Redis (filas `imports` e `mail`) |
 | `JWT_ACCESS_SECRET` | obrigatória | Assinatura do cookie de acesso, mínimo de 32 caracteres |
-| `STORAGE_PUBLIC_URL` | `http://localhost:{PORT}/uploads` | URL pública das fotos de perfil |
-| `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | vazias | Reservadas para o R2/S3 (ainda não usadas, veja abaixo) |
+| `STORAGE_DRIVER` | `local` | Onde ficam os arquivos: `local` (pasta `uploads/`) ou `s3` (bucket S3, Cloudflare R2 ou MinIO). Veja abaixo |
+| `STORAGE_PUBLIC_URL` | `http://localhost:{PORT}/uploads` | URL pública de `/uploads` da API, base do `avatarUrl` (ex. `https://api.sinapse.app/uploads`). Obrigatória em produção |
+| `STORAGE_BUCKET` | vazia | Nome do bucket. Obrigatória com `s3` |
+| `STORAGE_ENDPOINT` | vazia | Endpoint do compatível (R2: `https://<account-id>.r2.cloudflarestorage.com`). Vazia no AWS S3 |
+| `STORAGE_REGION` | `auto` | `auto` no R2; no AWS S3, a região do bucket (ex. `sa-east-1`) |
+| `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | vazias | Chaves de acesso ao bucket (as duas juntas). Sem nenhuma, vale a cadeia padrão da AWS (papel IAM) |
+| `STORAGE_FORCE_PATH_STYLE` | `false` | `true` no MinIO (bucket no caminho da URL) |
 | `MAIL_FROM` | `Sinapse <nao-responda@sinapse.app>` | Remetente |
 | `SMTP_URL` | `smtp://localhost:1025` | Servidor de email (Mailpit em desenvolvimento) |
 | `BILLING_PROVIDER` | `fake` | Gateway de pagamento. Por enquanto só o provedor de teste |
@@ -51,7 +56,12 @@ A API valida tudo na inicialização (`src/config/env.ts`) e não sobe se faltar
 | `BILLING_GRACE_DAYS` | `5` | Prazo para trocar o cartão depois de um pagamento recusado |
 | `FSRS_REQUEST_RETENTION`, `FSRS_MAXIMUM_INTERVAL`, `FSRS_ENABLE_FUZZ`, `FSRS_WEIGHTS` | padrão do ts-fsrs | Parâmetros da repetição espaçada |
 
-**Arquivos:** por enquanto o storage é só em disco, na pasta `uploads/`. As fotos de perfil ficam públicas em `/uploads/avatars`; os arquivos importados (PDF/Word) não são servidos e saem do disco quando viram cards ou depois de 24 h. O cliente R2/S3 ainda não existe. Em produção, com mais de uma instância ou disco temporário, ele precisa ser implementado antes (a interface é `StorageService`).
+**Arquivos:** fotos de perfil (`avatars/`) e arquivos importados (`imports/`, PDF/Word, apagados quando viram cards ou depois de 24 h). Com `STORAGE_DRIVER=local` ficam na pasta `uploads/`, o que só serve para desenvolvimento ou uma única instância com disco que não se apaga a cada deploy. Em produção use `STORAGE_DRIVER=s3`:
+
+- O bucket fica **privado**: não ligue acesso público nem domínio público nele. A própria API serve as fotos em `/uploads/avatars/<arquivo>` (lendo do bucket, com ETag), e os arquivos importados nunca saem dela.
+- Cloudflare R2: crie o bucket, gere um token de API com "Object Read & Write" só para ele e use `STORAGE_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`, `STORAGE_REGION=auto` e as chaves do token.
+- `STORAGE_PUBLIC_URL` aponta para a API (ex. `https://api.sinapse.app/uploads`).
+- Trocar de `local` para `s3` não leva os arquivos junto: copie a pasta `uploads/avatars` para o prefixo `avatars/` do bucket (os importados expiram sozinhos).
 
 ## Comandos
 
